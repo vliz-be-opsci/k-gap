@@ -31,4 +31,5 @@ jobs:
       run: |
         # for dn in graphdb jupyter; do\  # TODO add more as we go along...
         for dn in graphdb; do\
-          docker push ${REG_NS}/kgap_${dn}:${BUILD_TAG}
+          docker push ${REG_NS}/kgap_${dn}:${BUILD_TAG};\
+        done
