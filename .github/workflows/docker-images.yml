@@ -13,13 +13,6 @@ jobs:
     - name: Checkout the codebase
       uses: actions/checkout@v3
      
-    - name: Build the Docker images
-      run: | 
-        touch .env                                  # make sure we have one to satisfy the build
-        export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
-        export BUILD_TAG=$(date +%s)                # TODO consider builds for release tags too
-        make build                                  # uses the docker compose build of this repo 
-      
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v1
       with:
@@ -27,9 +20,10 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
         
-    - name: Push the docker images that were built
-      run: |
-        echo "ensure we still know about ${BUILD_TAG}"
-        for dn in graphdb; do\
-          docker push ${REG_NS}/kgap_${dn}:${BUILD_TAG};\
-        done
+    - name: Build the Docker images and Push them to the registry-namespace indicated in REG_NS
+      run: | 
+        touch .env                                  # make sure we have one to satisfy the build
+        export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
+        export BUILD_TAG="latest"                   # alternative BUILD_TAG=$(date +%s) -- TODO consider builds for release tags too
+        make docker-push                            # uses the docker compose build and docker push 
+
