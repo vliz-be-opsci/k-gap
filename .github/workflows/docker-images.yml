@@ -29,7 +29,7 @@ jobs:
         
     - name: Push the docker images that were built
       run: |
-        # for dn in graphdb jupyter; do\  # TODO add more as we go along...
+        echo "ensure we still know about ${BUILD_TAG}"
         for dn in graphdb; do\
           docker push ${REG_NS}/kgap_${dn}:${BUILD_TAG};\
         done
