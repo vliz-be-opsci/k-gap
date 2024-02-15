@@ -1,0 +1,33 @@
+name: Docker Images Build & Push to ghrc.io
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout the codebase
+      uses: actions/checkout@v3
+     
+    - name: Build the Docker images
+      run: | 
+        export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
+        export BUILD_TAG=$(date +%s)                # TODO consider builds for release tags too
+        make build                                  # uses the docker compose build of this repo 
+      
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Push the docker images that were built
+      run: |
+        # for dn in graphdb jupyter; do\  # TODO add more as we go along...
+        for dn in graphdb; do\
+          docker push ${REG_NS}/kgap_${dn}:${BUILD_TAG}
