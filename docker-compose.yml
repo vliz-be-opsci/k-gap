@@ -6,11 +6,11 @@ services:
   graphdb:
     build:
       context: ./graphdb
-    image: kgap/kgap_graphdb
+    image: ${REG_NS:-kgap}/kgap_graphdb:${BUILD_TAG:-latest}
     container_name: test_kgap_graphdb
     env_file:
       - ./.env
-    environment: 
+    #environment: 
       #GDB_REPO: kgap                       # default should be changed to reflect the name of your particular case
       #GDB_HOME_FOLDER: /opt/graphdb/home/  # default might be changed to externalise/persist the storage 
     ports:
@@ -22,7 +22,7 @@ services:
   jupyter:
     build:
       context: ./jupyter
-    image: kgap/kgap_jupyter
+    image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
     container_name: test_kgap_jupyter
     ports:
       - "8889:8888"
