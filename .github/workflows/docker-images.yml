@@ -15,6 +15,7 @@ jobs:
      
     - name: Build the Docker images
       run: | 
+        touch .env                                  # make sure we have one to satisfy the build
         export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
         export BUILD_TAG=$(date +%s)                # TODO consider builds for release tags too
         make build                                  # uses the docker compose build of this repo 
