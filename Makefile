@@ -1,11 +1,12 @@
 # Note: Ensure variable declarations in makefiles have NO trailing whitespace
 #       This can be achieved by sliding in the # comment-sign directly after the value
+PROJECT := "kgap"#              - this project
 TIME_TAG := $(shell date +%s)#  - the unix epoch
 BUILD_TAG ?= ${TIME_TAG}#       - provide the BUILD_TAG in the environment, or fallback to time
 REG_NS ?= "kgap"#               - allow the namespace to be overridden to e.g. ghcr.io/vliz-be-opsci/kgap
+DIMGS="graphdb jupyter"#        - the list of docker images in docker-compose.yml ready to be pushed
 
-
-.PHONY: docker-build docker-push tryif
+.PHONY: docker-build docker-push docker-start docker-stop
 
 
 # usage `make BUILD_TAG=0.2 docker-build` to include a specific tag to the build docker images
@@ -22,10 +23,24 @@ ifeq ($(shell echo ${REG_NS} | egrep '.+/.+'),)  # the 'shell' call is essential
 	@echo "not pushing docker images if no / between non-empty parts in REG_NS=${REG_NS}"
 	@exit 1
 else
-	@docker 
 # note the double $$ on dn distinction between makefile and shell var expansion
-	@for dn in graphdb; do \
-		docker push ${REG_NS}/kgap_$${dn}:${BUILD_TAG}; \
+	@for dn in "${DIMGS}"; do \
+		docker push ${REG_NS}/${PROJECT}_$${dn}:${BUILD_TAG}; \
 	done;
 endif
 
+
+docker-start: 
+	@echo "launching docker-stack for local test with default names and tags"
+	@mkdir -p ./data/
+	@mkdir -p ./notebooks/
+	@docker compose up -d
+
+
+docker-stop:
+	@echo "shutting down docker-stack from docker-start"
+	@docker compose down
+
+
+docker-clean:
+	@./docker_clean.sh ${PROJECT}
