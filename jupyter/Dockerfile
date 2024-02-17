@@ -1,6 +1,11 @@
 FROM jupyter/base-notebook
-VOLUME /notebooks
-WORKDIR /notebooks
 
-COPY ./requirements.txt /requirements.txt
-RUN pip install -r /requirements.txt
+COPY ./kgap /kgap
+RUN pip install -r /kgap/requirements.txt
+
+VOLUME /notebooks
+VOLUME /data
+VOLUME /config
+
+WORKDIR /notebooks
+ENTRYPOINT [ "/kgap/entrypoint-wrap.sh" ]

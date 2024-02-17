@@ -1,3 +1,4 @@
+#sparql by template
 pykg2tbl
 #visualisation packages
 matplotlib

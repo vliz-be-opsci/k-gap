@@ -19,20 +19,21 @@ services:
       - ./data:/root/graphdb-import/data
       # todo later - consider mounted volumes for persistence of data ?
 
- # jupyter:
- #   build:
- #     context: ./jupyter
- #   image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
- #   container_name: test_kgap_jupyter
- #   ports:
- #     - "8889:8888"
- #   links:
- #     - graphdb
- #   volumes:
- #     - "./notebooks:/notebooks"
- #   env_file:
- #     - ./.env
- #   environment:
- #     GDB_BASE: "http://graphdb:7200/"
- #     NOTEBOOK_ARGS: "--NotebookApp.token=''"
+  jupyter:
+    build:
+      context: ./jupyter
+    image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
+    container_name: test_kgap_jupyter
+    ports:
+      - "8889:8888"
+    links:
+      - graphdb
+    volumes:
+      - "./notebooks:/notebooks"
+      - "./data:/data"
+    env_file:
+      - ./.env
+    environment:
+      GDB_BASE: "http://graphdb:7200/"
+      NOTEBOOK_ARGS: "--NotebookApp.token=''"
     
