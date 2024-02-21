@@ -3,7 +3,7 @@
 REPONAME=${GDB_REPO:-kgap}
 REPOLABEL=${REPOLABEL:-"KGAP repo for ${REPONAME}"}
 GDB_HOME_FOLDER=${GDB_HOME_FOLDER:-/opt/graphdb/home} 
-GDB_HTTPHEADER_SIZE=${GDB_MAX_HEADER:-65536}
+GDB_MAX_HEADER=${GDB_MAX_HEADER:-65536}
 # 1. ensure the config for the needed repo is there
 REPODIR="${GDB_HOME_FOLDER}/data/repositories/${REPONAME}"
 REPOFILE="${REPODIR}/config.ttl"
