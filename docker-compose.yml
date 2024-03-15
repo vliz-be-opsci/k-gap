@@ -36,4 +36,19 @@ services:
     environment:
       GDB_BASE: "http://graphdb:7200/"
       NOTEBOOK_ARGS: "--NotebookApp.token=''"
-    
+
+  sembench:
+    build:
+      context: ./sembench
+    image: ${REG_NS:-kgap}/kgap_sembench:${BUILD_TAG:-latest}
+    container_name: test_kgap_sembench
+    volumes:
+      - "./data:/data"
+    env_file:
+      - ./.env
+    # environment:
+    #   - INPUT_DATA_LOCATION=/data
+    #   - OUTPUT_DATA_LOCATION=/data
+    #   - SEMBENCH_DATA_LOCATION=/data
+    #   - SEMBENCH_CONFIG_PATH=/data/sembench.json
+    #   - SCHEDULER_INTERVAL_SECONDS=86400
