@@ -36,6 +36,9 @@ services:
     environment:
       GDB_BASE: "http://graphdb:7200/"
       NOTEBOOK_ARGS: "--NotebookApp.token=''"
+    depends_on:
+      graphdb:
+        condition: service_healthy
 
   sembench:
     build:
@@ -52,3 +55,6 @@ services:
     #   - SEMBENCH_DATA_LOCATION=/data
     #   - SEMBENCH_CONFIG_PATH=/data/sembench.json
     #   - SCHEDULER_INTERVAL_SECONDS=86400
+    depends_on:
+      graphdb:
+        condition: service_healthy
