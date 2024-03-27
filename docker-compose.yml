@@ -6,7 +6,7 @@ services:
   yasgui:
     image: redpencil/yasgui:latest
     environment:
-      DEFAULT_SPARQL_ENDPOINT: "http://localhost:7200/repositories/kgap" # that should be in the setup script | same exposed port as graphdb
+      DEFAULT_SPARQL_ENDPOINT: "http://localhost:7200/repositories/${GDB_REPO:-kgap}" # that should be in the setup script | same exposed port as graphdb
     ports:
       - "8080:80"
   graphdb:
