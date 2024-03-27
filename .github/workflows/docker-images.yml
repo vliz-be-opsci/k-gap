@@ -2,28 +2,35 @@ name: Docker Images Build & Push to ghrc.io
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+    tags: ["*"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout the codebase
-      uses: actions/checkout@v3
-     
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v1
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Build the Docker images and Push them to the registry-namespace indicated in REG_NS
-      run: | 
-        touch .env                                  # make sure we have one to satisfy the build
-        export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
-        export BUILD_TAG="latest"                   # alternative BUILD_TAG=$(date +%s) -- TODO consider builds for release tags too
-        make docker-push                            # uses the docker compose build and docker push 
+      - name: Checkout the codebase
+        uses: actions/checkout@v3
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the Docker images and Push them to the registry-namespace indicated in REG_NS
+        run: |
+          touch .env                                  # make sure we have one to satisfy the build
+          export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
+
+          # build tag is the same as tag name for releases if this matches the semver format else it is latest
+          if [[ $TAG_NAME =~ ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$ ]]; then
+            export BUILD_TAG=$TAG_NAME
+          else
+            export BUILD_TAG="latest"
+          fi
+
+          make docker-push                            # uses the docker compose build and docker push

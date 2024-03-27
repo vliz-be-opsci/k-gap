@@ -1,4 +1,4 @@
-FROM ontotext/graphdb:10.0.2
+FROM ontotext/graphdb:10.4.4
 
 COPY ./kgap /kgap
 RUN chmod +x /kgap/*.sh
