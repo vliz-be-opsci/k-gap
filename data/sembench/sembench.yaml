@@ -1,0 +1,14 @@
+ingest_data_task:
+  func: py-sync-fs-triples
+  args:
+    root: data
+    read_uri: http://graphdb:7200/repositories/kgap
+    write_uri: http://graphdb:7200/repositories/kgap/statements
+
+travharv_task:
+  func: py-trav-harv
+  args:
+    config: data/travharv_config
+    target_store_info:
+      - http://graphdb:7200/repositories/kgap
+      - http://graphdb:7200/repositories/kgap/statements
