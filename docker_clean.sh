@@ -16,7 +16,7 @@ else     # only actually do this if there was real arg to narrow down to
           --type=container ${cid} \
           --format='  - id: {{println .Id}}  - created: {{println .Created}}  - image: {{println .Config.Image}}  - name: {{ .Name}}'; 
         read -p "  type 'y' to remove? " ans; 
-        if [[ "${ans}" == "y" ]]; then docker rm $cid && echo "  > removed ${cid}" || echo "  > removal failed."; 
+        if [[ "${ans}" == "y" ]]; then docker rm -f $cid && echo "  > removed ${cid}" || echo "  > removal failed."; 
         else                                             echo "  > skipped ${cid}"; 
         fi 
         echo;
@@ -29,7 +29,7 @@ for iid in $(docker images | tail -n +2 | grep "${project}" | awk '{print $3} ')
     echo "found image ${iid}:" ; 
     docker inspect --type=image ${iid} --format='  - id: {{println .Id}}  - tags: {{ .RepoTags}}'; 
     read -p "  type 'y' to remove? " ans; 
-    if [[ "${ans}" == "y" ]]; then docker rmi $iid && echo "  > removed ${iid}" || echo "  > removal failed."; 
+    if [[ "${ans}" == "y" ]]; then docker rmi -f $iid && echo "  > removed ${iid}" || echo "  > removal failed."; 
     else                                              echo "  > skipped ${iid}"; 
     fi 
     echo; 
