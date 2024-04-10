@@ -21,16 +21,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract tag name
+        id: get_tag
+        run: echo ::set-output name=TAG_NAME::${GITHUB_REF#refs/tags/}
+      - name: Use tag name
+        run: echo ${{ steps.get_tag.outputs.TAG_NAME }}
+
       - name: Build the Docker images and Push them to the registry-namespace indicated in REG_NS
         run: |
           touch .env                                  # make sure we have one to satisfy the build
           export REG_NS="ghcr.io/vliz-be-opsci/kgap"  # sets the public scope for these
-
+          TAG_NAME=${GITHUB_REF#refs/tags/}           # this is the tag name of the release
+          echo $TAG_NAME                             # this is the tag name of the release
           # build tag is the same as tag name for releases if this matches the semver format else it is latest
           if [[ $TAG_NAME =~ ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$ ]]; then
             export BUILD_TAG=$TAG_NAME
           else
             export BUILD_TAG="latest"
           fi
+          echo $BUILD_TAG
 
           make docker-push                            # uses the docker compose build and docker push
