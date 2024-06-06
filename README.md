@@ -23,7 +23,4 @@ todo list available images & purpose
 ## kgap-sembench
 
 ## no longer: kgap-ingest 
-todo follow up on latest idea to redo this as py-sync-files-to-store by itself, and then re-wrap it under the sembench as a recurring action to exceute
-
-
-# 
+todo follow up on latest idea to redo this as py-sync-files-to-store by itself, and then re-wrap it under the sembench as a recurring action to execute
