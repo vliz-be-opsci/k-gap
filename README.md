@@ -8,15 +8,14 @@ todo general statements about the ambition and pupose of this
 its focus on microservices
 and its relation to sembench (as the py package that combines things)
 
-
 ## build your own
-
 todo commands to build docker images locally
+
+## start up
 ```bash
 $ cp dotenv-example .env
 $ docker compose up
 ```
-
 
 # published docker images from this repo
 
