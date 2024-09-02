@@ -12,6 +12,10 @@ and its relation to sembench (as the py package that combines things)
 ## build your own
 
 todo commands to build docker images locally
+```bash
+$ cp dotenv-example .env
+$ docker compose up
+```
 
 
 # published docker images from this repo
