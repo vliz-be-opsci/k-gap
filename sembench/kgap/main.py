@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import os
 from pathlib import Path
-from pysembench.core import Sembench, locations_from_environ
-
+from sema.bench import Sembench
+from sema.bench.core import locations_from_environ
 
 sb = Sembench(
     locations=locations_from_environ(),
