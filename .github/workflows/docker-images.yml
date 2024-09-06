@@ -6,6 +6,8 @@ on:
     tags: ["*"]
   pull_request:
     branches: ["main"]
+  repository_dispatch:
+    types: [trigger-event]
 
 jobs:
   build:
