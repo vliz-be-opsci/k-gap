@@ -26,7 +26,10 @@
             graphdb:storage-folder "storage" ;
 
             graphdb:enable-context-index "false" ;
-
+            graphdb:enable-fts-index "true" ;
+            graphdb:fts-iris-index "default";
+            graphdb:fts-string-literals-index "default";
+            graphdb:fts-indexes ("default" "iri");
             graphdb:enablePredicateList "true" ;
 
             graphdb:in-memory-literal-properties "true" ;
