@@ -9,6 +9,6 @@ RUN apk update && apk add gettext
 RUN mkdir -p /root/graphdb-import/data
 WORKDIR /root/graphdb-import/data
 
-HEALTHCHECK --start-period=1s --interval=0.5s CMD /kgap/healthy.sh
+HEALTHCHECK --start-period=30s --interval=5s --timeout=3s --retries=3 CMD /kgap/healthy.sh
 
 ENTRYPOINT [ "/kgap/entrypoint-wrap.sh" ] 
