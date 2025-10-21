@@ -1,8 +1,9 @@
 #!/bin/bash
-# Use GraphDB's native passive health-check endpoint
-# This is the least intrusive check that doesn't scale with triple count
-# See: https://graphdb.ontotext.com/documentation/10.4/database-health-checks.html
-HEALTH_CHECK_URI="http://localhost:7200/rest/monitor/infrastructure?passive"
-# do the health-check
+# 0. config reading from environment
+REPONAME=${GDB_REPO:-kgap}
+# Use the repository size endpoint - lightweight O(1) operation that checks repo exists
+# This doesn't scale with triple count unlike the statements endpoint
+HEALTH_CHECK_URI="http://localhost:7200/repositories/${REPONAME}/size" 
+# 1. do the health-check
 #   IMPORTANT NOTE -- being last statement this will produce bash exit code
 curl --fail -X GET --url ${HEALTH_CHECK_URI}  

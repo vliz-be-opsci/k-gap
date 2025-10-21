@@ -27,6 +27,12 @@ services:
     volumes:
       - ./data:/root/graphdb-import/data
       # todo later - consider mounted volumes for persistence of data ?
+    # For heavy-feature GraphDB repos that take longer to initialize, override healthcheck:
+    # healthcheck:
+    #   start_period: 30s
+    #   interval: 5s
+    #   timeout: 3s
+    #   retries: 3
 
   jupyter:
     build:
