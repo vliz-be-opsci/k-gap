@@ -9,6 +9,9 @@ RUN apk update && apk add gettext
 RUN mkdir -p /root/graphdb-import/data
 WORKDIR /root/graphdb-import/data
 
-HEALTHCHECK --start-period=1s --interval=0.5s CMD /kgap/healthy.sh
+# Healthcheck configuration - can be overridden via docker-compose or environment variables
+# For heavy-feature repos, consider increasing start-period (e.g., HEALTHCHECK_START_PERIOD=30s)
+# Defaults: start-period=1s, interval=5s, timeout=3s, retries=3
+HEALTHCHECK --start-period=1s --interval=5s --timeout=3s --retries=3 CMD /kgap/healthy.sh
 
 ENTRYPOINT [ "/kgap/entrypoint-wrap.sh" ] 
