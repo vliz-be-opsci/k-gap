@@ -3,6 +3,7 @@ GDB_REPO=kgap
 REPOLABEL=label_repo_here
 GDB_HOME_FOLDER=/opt/graphdb/home
 GDB_MAX_HEADER=65536
+GDB_JAVA_OPTS="-Xms8g -Xmx16g -Dcom.ontotext.graphdb.monitoring.jmx=true"
 
 #jupyter env variables
 SRC_FOLDER=/kgap/notebooks
