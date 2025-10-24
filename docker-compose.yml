@@ -73,3 +73,19 @@ services:
     depends_on:
       graphdb:
         condition: service_healthy
+
+  ldes-consumer:
+    build:
+      context: ./ldes-consumer
+    image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}
+    container_name: test_kgap_ldes_consumer
+    volumes:
+      - "./data:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Required to spawn docker containers
+    env_file:
+      - ./.env
+    environment:
+      - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-kgap}_default
+    depends_on:
+      graphdb:
+        condition: service_healthy

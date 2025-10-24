@@ -19,3 +19,7 @@ SEMBENCH_OUTPUT_PATH=/data
 SEMBENCH_HOME_PATH=/data
 SEMBENCH_CONFIG_PATH=/data/sembench.yaml
 SCHEDULER_INTERVAL_SECONDS=86400
+
+# ldes-consumer env variables
+LDES_CONFIG_FILE=/data/ldes-feeds.yaml
+LDES2SPARQL_IMAGE=brechtvdv/ldes2sparql:latest
