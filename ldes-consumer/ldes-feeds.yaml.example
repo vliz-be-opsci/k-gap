@@ -4,7 +4,7 @@
 feeds:
   # Example feed 1
   - name: example-feed-1
-    url: http://example.com/ldes-feed-1
+    url: https://marineinfo.org/feed/person
     sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
     polling_interval: 60  # seconds (optional, defaults to 60)
     environment:  # optional additional environment variables
@@ -12,10 +12,10 @@ feeds:
       # EXAMPLE_VAR: value
 
   # Example feed 2
-  # - name: example-feed-2
-  #   url: http://example.com/ldes-feed-2
-  #   sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
-  #   polling_interval: 120
+  - name: example-feed-2
+    url: https://marineinfo.org/feed/publication
+    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+    polling_interval: 120
 
 # Note: Each feed will spawn a separate ldes2sparql Docker container instance
 # Container names will be: ldes-consumer-{feed-name}
