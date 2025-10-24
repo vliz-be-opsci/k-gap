@@ -3,7 +3,7 @@ set -e
 
 # Environment variables
 LDES_CONFIG_FILE="${LDES_CONFIG_FILE:-/data/ldes-feeds.yaml}"
-LDES2SPARQL_IMAGE="${LDES2SPARQL_IMAGE:-brechtvdv/ldes2sparql:latest}"
+LDES2SPARQL_IMAGE="${LDES2SPARQL_IMAGE:-ghcr.io/rdf-connect/ldes2sparql:latest}"
 
 # Check if config file exists
 if [ ! -f "$LDES_CONFIG_FILE" ]; then
