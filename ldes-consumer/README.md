@@ -13,7 +13,8 @@ The LDES consumer service reads a YAML configuration file containing a list of L
 The following environment variables can be configured in your `.env` file:
 
 - `LDES_CONFIG_FILE`: Path to the YAML configuration file (default: `/data/ldes-feeds.yaml`)
-- `LDES2SPARQL_IMAGE`: Docker image to use for ldes2sparql (default: `brechtvdv/ldes2sparql:latest`)
+- `LDES2SPARQL_IMAGE`: Docker image to use for ldes2sparql (default: `ghcr.io/rdf-connect/ldes2sparql:latest`)
+- `LOG_LEVEL`: Logging level for the LDES consumer service (default: `INFO`). Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
 ### LDES Feeds Configuration File
 
@@ -85,6 +86,19 @@ All spawned ldes2sparql containers are attached to the same Docker network as th
 
 ## Logging
 
+The LDES consumer service uses structured logging with configurable log levels. 
+
+### Log Levels
+
+Set the `LOG_LEVEL` environment variable to control the verbosity of logs:
+- `DEBUG`: Detailed information for debugging (includes Docker commands)
+- `INFO`: General informational messages (default)
+- `WARNING`: Warning messages for potential issues
+- `ERROR`: Error messages for failures
+- `CRITICAL`: Critical errors that prevent operation
+
+### Viewing Logs
+
 Logs from the spawner service can be viewed using:
 ```bash
 docker compose logs ldes-consumer
@@ -93,4 +107,11 @@ docker compose logs ldes-consumer
 Logs from individual ldes2sparql containers can be viewed using:
 ```bash
 docker logs ldes-consumer-{feed-name}
+```
+
+### Log Format
+
+Logs are formatted with timestamp, logger name, level, and message:
+```
+2025-10-28 14:20:00 - ldes-consumer - INFO - Starting LDES consumer for feed: example-feed-1
 ```
