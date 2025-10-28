@@ -85,13 +85,16 @@ def spawn_ldes2sparql_instance(
     # Add environment variables
     cmd.extend(["-e", f"LDES={feed_url}"])
     cmd.extend(["-e", f"SPARQL_ENDPOINT={sparql_endpoint}"])
-    cmd.extend(["-e", "TARGET_GRAPH="])
     cmd.extend(["-e", "SHAPE="])
+    cmd.extend(["-e", "TARGET_GRAPH="])
+    cmd.extend(["-e", "FAILURE_IS_FATAL=false"])
+    cmd.extend(["-e", "FOLLOW=true"])
+    cmd.extend(["-e", "MATERIALIZE=false"])
 
     # Note: The config uses 'polling_interval' (seconds) for user-friendliness,
     # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
     polling_frequency = feed.get("polling_interval", 60) * 1000
-    cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
+    # cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
 
     # log cmd
     print(f"DEBUG: Docker command for feed '{feed_name}': {' '.join(cmd)}")
@@ -120,7 +123,7 @@ def spawn_ldes2sparql_instance(
         )
         # Give the container a moment to start
         time.sleep(2)
-        
+
         # Check if the container is actually running
         check_cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
         try:
@@ -132,14 +135,14 @@ def spawn_ldes2sparql_instance(
                 return proc
             else:
                 # Container failed to start or is not running
-                print(
-                    f"ERROR: Container '{container_name}' failed to start properly"
-                )
+                print(f"ERROR: Container '{container_name}' failed to start properly")
                 # Try to get logs
                 logs_cmd = ["docker", "logs", container_name]
                 logs_result = subprocess.run(logs_cmd, capture_output=True, text=True)
                 if logs_result.stdout or logs_result.stderr:
-                    print(f"Container logs:\n{logs_result.stdout}\n{logs_result.stderr}")
+                    print(
+                        f"Container logs:\n{logs_result.stdout}\n{logs_result.stderr}"
+                    )
                 return None
         except subprocess.TimeoutExpired:
             print(f"ERROR: Timeout checking container status for '{container_name}'")
@@ -181,7 +184,9 @@ def main():
 
     # Spawn instances for each feed
     for feed in feeds:
-        proc = spawn_ldes2sparql_instance(feed, network_name, ldes2sparql_image, project_name)
+        proc = spawn_ldes2sparql_instance(
+            feed, network_name, ldes2sparql_image, project_name
+        )
         if proc:
             spawned_processes.append(proc)
 

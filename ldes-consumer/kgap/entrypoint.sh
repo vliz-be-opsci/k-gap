@@ -20,5 +20,8 @@ fi
 echo "Starting LDES consumer with config: $LDES_CONFIG_FILE"
 echo "Using ldes2sparql image: $LDES2SPARQL_IMAGE"
 
+# make sure that the ldes2sparql image is available
+docker pull "$LDES2SPARQL_IMAGE"
+
 # Parse YAML and start ldes2sparql instances
 python3 /kgap/spawn_instances.py "$LDES_CONFIG_FILE"
