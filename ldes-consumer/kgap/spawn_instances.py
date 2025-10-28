@@ -38,7 +38,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
 
 def spawn_ldes2sparql_instance(
-    feed: Dict[str, Any], network_name: str, image: str
+    feed: Dict[str, Any], network_name: str, image: str, project_name: str
 ) -> subprocess.Popen:
     """
     Spawn a single ldes2sparql Docker container instance.
@@ -47,6 +47,7 @@ def spawn_ldes2sparql_instance(
         feed: Dictionary containing feed configuration
         network_name: Docker network to attach to
         image: Docker image to use for ldes2sparql
+        project_name: Docker Compose project name for container labeling
 
     Returns:
         Subprocess object for the spawned container
@@ -72,6 +73,11 @@ def spawn_ldes2sparql_instance(
         container_name,
         "--network",
         network_name,
+        # Add labels to link container to the docker-compose project
+        "--label",
+        f"com.docker.compose.project={project_name}",
+        "--label",
+        "com.docker.compose.service=ldes-consumer",
         "-v",
         f"/data/ldes-state-{feed_name}:/state",
     ]
@@ -82,7 +88,8 @@ def spawn_ldes2sparql_instance(
     cmd.extend(["-e", "TARGET_GRAPH="])
     cmd.extend(["-e", "SHAPE="])
 
-    # Convert polling interval from seconds to milliseconds
+    # Note: The config uses 'polling_interval' (seconds) for user-friendliness,
+    # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
     polling_frequency = feed.get("polling_interval", 60) * 1000
     cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
 
@@ -111,18 +118,32 @@ def spawn_ldes2sparql_instance(
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        # Check for immediate failure
+        # Give the container a moment to start
+        time.sleep(2)
+        
+        # Check if the container is actually running
+        check_cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
         try:
-            stdout, stderr = proc.communicate(timeout=10)
-            print(
-                f"ERROR: Docker command failed for feed '{feed_name}' with code {proc.returncode}"
+            result = subprocess.run(
+                check_cmd, capture_output=True, text=True, timeout=5
             )
-            print(f"STDOUT: {stdout}")
-            print(f"STDERR: {stderr}")
-            return None
+            if result.returncode == 0 and result.stdout.strip() == "true":
+                # Container is running successfully
+                return proc
+            else:
+                # Container failed to start or is not running
+                print(
+                    f"ERROR: Container '{container_name}' failed to start properly"
+                )
+                # Try to get logs
+                logs_cmd = ["docker", "logs", container_name]
+                logs_result = subprocess.run(logs_cmd, capture_output=True, text=True)
+                if logs_result.stdout or logs_result.stderr:
+                    print(f"Container logs:\n{logs_result.stdout}\n{logs_result.stderr}")
+                return None
         except subprocess.TimeoutExpired:
-            # Process is still running, which is expected
-            return proc
+            print(f"ERROR: Timeout checking container status for '{container_name}'")
+            return None
     except Exception as e:
         print(f"ERROR: Failed to spawn container for feed '{feed_name}': {e}")
         return None
@@ -154,26 +175,13 @@ def main():
         "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"
     )
     network_name = os.getenv("DOCKER_NETWORK", "kgap_default")
+    project_name = os.getenv("COMPOSE_PROJECT_NAME", "kgap")
 
     print(f"Found {len(feeds)} LDES feed(s) to process")
 
-    # Pull the Docker image
-    print(f"Pulling Docker image: {ldes2sparql_image}")
-    try:
-        pull_result = subprocess.run(
-            ["docker", "pull", ldes2sparql_image],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        print("Image pulled successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: Failed to pull image '{ldes2sparql_image}': {e.stderr}")
-        sys.exit(1)
-
     # Spawn instances for each feed
     for feed in feeds:
-        proc = spawn_ldes2sparql_instance(feed, network_name, ldes2sparql_image)
+        proc = spawn_ldes2sparql_instance(feed, network_name, ldes2sparql_image, project_name)
         if proc:
             spawned_processes.append(proc)
 

@@ -41,19 +41,25 @@ feeds:
 - `sparql_endpoint`: SPARQL endpoint where the data should be ingested
 
 #### Optional fields:
-- `polling_interval`: How often to poll the feed in seconds (default: 60)
+- `polling_interval`: How often to poll the feed in seconds (default: 60). Note: This is converted to milliseconds and passed as `POLLING_FREQUENCY` to the ldes2sparql container.
 - `environment`: Additional environment variables to pass to the ldes2sparql container
 
 ## Usage
 
-1. Copy the example configuration file:
+1. Ensure the ldes2sparql Docker image is available:
+   ```bash
+   docker pull ghcr.io/rdf-connect/ldes2sparql:latest
+   ```
+   Or build it locally if needed.
+
+2. Copy the example configuration file:
    ```bash
    cp ldes-consumer/ldes-feeds.yaml.example data/ldes-feeds.yaml
    ```
 
-2. Edit `data/ldes-feeds.yaml` with your LDES feeds
+3. Edit `data/ldes-feeds.yaml` with your LDES feeds
 
-3. Start the service using Docker Compose:
+4. Start the service using Docker Compose:
    ```bash
    docker compose up ldes-consumer
    ```
@@ -63,6 +69,7 @@ feeds:
 1. The service reads the YAML configuration file on startup
 2. For each feed in the configuration, it spawns a new Docker container running `ldes2sparql`
 3. Each container is named `ldes-consumer-{feed-name}` and attached to the Docker Compose network
+4. Containers are labeled with the Docker Compose project name for integration with the stack
 4. The service monitors the spawned containers and automatically restarts them if they fail
 5. All containers are gracefully stopped when the service is terminated
 
