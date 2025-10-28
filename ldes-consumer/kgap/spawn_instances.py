@@ -67,7 +67,7 @@ def spawn_ldes2sparql_instance(
     cmd = [
         "docker",
         "run",
-        "--rm",
+        # "--rm", # Uncomment to auto-remove container on exit
         "--name",
         container_name,
         "--network",
@@ -80,10 +80,14 @@ def spawn_ldes2sparql_instance(
     cmd.extend(["-e", f"LDES={feed_url}"])
     cmd.extend(["-e", f"SPARQL_ENDPOINT={sparql_endpoint}"])
     cmd.extend(["-e", "TARGET_GRAPH="])
+    cmd.extend(["-e", "SHAPE="])
 
     # Convert polling interval from seconds to milliseconds
     polling_frequency = feed.get("polling_interval", 60) * 1000
     cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
+
+    # log cmd
+    print(f"DEBUG: Docker command for feed '{feed_name}': {' '.join(cmd)}")
 
     # Add any additional environment variables from the feed config
     extra_env = feed.get("environment") or {}
@@ -192,6 +196,7 @@ def main():
                 print(
                     f"WARNING: LDES consumer for feed '{feed_name}' terminated with code {returncode}"
                 )
+                """
                 # Try to read final output
                 stdout, stderr = proc.communicate()
                 if stdout:
@@ -207,6 +212,7 @@ def main():
                     print(f"Successfully restarted consumer for feed '{feed_name}'")
                 else:
                     print(f"Failed to restart consumer for feed '{feed_name}'")
+                """
 
 
 if __name__ == "__main__":
