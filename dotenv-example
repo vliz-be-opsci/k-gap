@@ -1,3 +1,6 @@
+# docker compose env variables
+COMPOSE_PROJECT_NAME=kgap
+
 #graphdb env variables
 GDB_REPO=kgap
 REPOLABEL=label_repo_here
