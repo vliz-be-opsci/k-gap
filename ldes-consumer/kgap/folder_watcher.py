@@ -133,7 +133,13 @@ def spawn_container(yaml_file: Path) -> bool:
     
     # Polling interval: convert seconds to milliseconds if provided
     polling_interval = config.get('polling_interval', 5)
-    polling_frequency = int(polling_interval * 1000)
+    try:
+        polling_frequency = int(float(polling_interval) * 1000)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Invalid polling_interval '{polling_interval}', using default 5000ms"
+        )
+        polling_frequency = 5000
     cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
     
     # Add timestamp filters if provided
@@ -143,7 +149,8 @@ def spawn_container(yaml_file: Path) -> bool:
         cmd.extend(["-e", f"AFTER={config['after']}"])
     
     # Add concurrent fetches option
-    cmd.extend(["-e", f"CONCURRENT_FETCHES={config.get('concurrent_fetches', '10')}"])
+    concurrent_fetches = config.get('concurrent_fetches', 10)
+    cmd.extend(["-e", f"CONCURRENT_FETCHES={int(concurrent_fetches)}"])
     
     # Add SPARQL-specific options
     cmd.extend(["-e", f"FOR_VIRTUOSO={config.get('for_virtuoso', 'false')}"])
@@ -161,7 +168,13 @@ def spawn_container(yaml_file: Path) -> bool:
     extra_env = config.get("environment") or {}
     if isinstance(extra_env, dict):
         for key, value in extra_env.items():
-            cmd.extend(["-e", f"{key}={value}"])
+            # Validate and sanitize environment variable values
+            if value is not None:
+                # Convert to string and escape special characters
+                safe_value = str(value).replace('"', '\\"')
+                cmd.extend(["-e", f"{key}={safe_value}"])
+            else:
+                logger.warning(f"Skipping environment variable '{key}' with None value")
     
     # Add the image name
     cmd.append(ldes2sparql_image)

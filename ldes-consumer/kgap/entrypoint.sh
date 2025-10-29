@@ -36,8 +36,9 @@ if [ -z "$LDES_CONFIG_PATH" ]; then
     # Install Node.js and dependencies as in the ldes2sparql Dockerfile
     echo "Installing Node.js and ldes2sparql dependencies..."
     
-    # Install Node.js
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+    # Install Node.js LTS (pinned version for security)
+    NODEJS_VERSION="20.x"
+    curl -fsSL "https://deb.nodesource.com/setup_${NODEJS_VERSION}" | bash -
     apt-get install -y nodejs
     
     # Clone and setup ldes2sparql
