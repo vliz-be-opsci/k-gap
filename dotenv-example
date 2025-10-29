@@ -1,3 +1,6 @@
+# docker compose env variables
+COMPOSE_PROJECT_NAME=kgap
+
 #graphdb env variables
 GDB_REPO=kgap
 REPOLABEL=label_repo_here
@@ -19,3 +22,8 @@ SEMBENCH_OUTPUT_PATH=/data
 SEMBENCH_HOME_PATH=/data
 SEMBENCH_CONFIG_PATH=/data/sembench.yaml
 SCHEDULER_INTERVAL_SECONDS=86400
+
+# ldes-consumer env variables
+LDES_CONFIG_FILE=/data/ldes-feeds.yaml
+LDES2SPARQL_IMAGE=ghcr.io/rdf-connect/ldes2sparql:latest
+LOG_LEVEL=INFO

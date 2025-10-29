@@ -1,6 +1,7 @@
 # this is a sample docker-compose of how to use kgap microservices
 # it functions as (1) a list of images to be build, (2) a usage-example and (3) a quick-test
 version: "3.7"
+name: ${COMPOSE_PROJECT_NAME:-kgap}
 # -----------------------------------------------------------------------
 services: 
   yasgui:
@@ -70,6 +71,22 @@ services:
     #   - SEMBENCH_DATA_LOCATION=/data
     #   - SEMBENCH_CONFIG_PATH=/data/sembench.json
     #   - SCHEDULER_INTERVAL_SECONDS=86400
+    depends_on:
+      graphdb:
+        condition: service_healthy
+
+  ldes-consumer:
+    build:
+      context: ./ldes-consumer
+    image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}
+    container_name: test_kgap_ldes_consumer
+    volumes:
+      - "./data:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Required to spawn docker containers
+    env_file:
+      - ./.env
+    environment:
+      - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-kgap}_default
     depends_on:
       graphdb:
         condition: service_healthy

@@ -1,0 +1,24 @@
+# Example LDES feeds configuration file
+# This file should be placed in the data directory and configured via LDES_CONFIG_FILE environment variable
+
+feeds:
+  # Example feed 1 - Generic example
+  # Note: Replace with actual LDES feed URLs that have been tested
+  - name: example-feed-1
+    url: http://example.com/ldes-feed-1
+    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+    polling_interval: 60  # seconds (optional, defaults to 60) - converted to milliseconds internally
+    environment:  # optional additional environment variables
+      # Add any additional environment variables needed by ldes2sparql here
+      # EXAMPLE_VAR: value
+
+  # Example feed 2 - Another generic example
+  # - name: example-feed-2
+  #   url: http://example.com/ldes-feed-2
+  #   sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+  #   polling_interval: 120
+
+# Note: Each feed will spawn a separate ldes2sparql Docker container instance
+# Container names will be: ldes-consumer-{feed-name}
+# The polling_interval is specified in seconds but is converted to milliseconds (POLLING_FREQUENCY) 
+# when passed to the ldes2sparql container

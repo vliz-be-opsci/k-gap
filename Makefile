@@ -4,7 +4,7 @@ PROJECT := "kgap"#              - this project
 TIME_TAG := $(shell date +%s)#  - the unix epoch
 BUILD_TAG ?= ${TIME_TAG}#       - provide the BUILD_TAG in the environment, or fallback to time
 REG_NS ?= "kgap"#               - allow the namespace to be overridden to e.g. ghcr.io/vliz-be-opsci/kgap
-DIMGS="graphdb jupyter sembench"#        - the list of docker images in docker-compose.yml ready to be pushed
+DIMGS="graphdb jupyter sembench ldes-consumer"#        - the list of docker images in docker-compose.yml ready to be pushed
 
 .PHONY: help docker-build docker-push docker-start docker-stop
 .DEFAULT_GOAL := help
