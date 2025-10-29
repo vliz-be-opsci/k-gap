@@ -4,6 +4,13 @@
 
 K-GAP is a microservices-based platform for building, managing, and analyzing knowledge graphs using SPARQL and linked data technologies.
 
+## Quick Navigation
+
+- **[Quick Reference](./quick-reference.md)** - Common commands and patterns
+- **[FAQ](./faq.md)** - Frequently asked questions
+- **[Advanced Topics](./advanced-topics.md)** - Advanced usage patterns
+- **[GitHub Pages Setup](./GITHUB_PAGES.md)** - Publishing this documentation
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -377,6 +384,16 @@ k-gap/
 
 See the main repository for contribution guidelines.
 
+## Advanced Topics
+
+For advanced usage patterns and concepts, see:
+- [Advanced Topics Guide](./advanced-topics.md)
+  - Assertion paths and dereferencing patterns
+  - Custom SPARQL query templates
+  - Data validation patterns
+  - Performance optimization
+  - Multi-repository setup
+
 ## Related Projects
 
 - [py-sema](https://github.com/vliz-be-opsci/py-sema): Python semantic processing library used by Sembench
@@ -393,3 +410,7 @@ K-GAP is licensed under the MIT License. See [LICENSE](../LICENSE) for details.
 For issues and questions:
 - GitHub Issues: https://github.com/vliz-be-opsci/k-gap/issues
 - Organization: https://github.com/vliz-be-opsci
+
+## Publishing Documentation
+
+This documentation is designed to be published on GitHub Pages. See [GitHub Pages Setup Guide](./GITHUB_PAGES.md) for instructions on publishing this documentation as a website.
