@@ -24,6 +24,35 @@ SEMBENCH_CONFIG_PATH=/data/sembench.yaml
 SCHEDULER_INTERVAL_SECONDS=86400
 
 # ldes-consumer env variables
-LDES_CONFIG_FILE=/data/ldes-feeds.yaml
+# Configuration mode options:
+# 1. Folder mode: Set LDES_CONFIG_PATH to a directory containing individual YAML files
+#    Example: LDES_CONFIG_PATH=/data/ldes-feeds
+# 2. Legacy mode: Set LDES_CONFIG_PATH to a single YAML file
+#    Example: LDES_CONFIG_PATH=/data/ldes-feeds.yaml
+# 3. Direct mode: Leave LDES_CONFIG_PATH unset and use direct environment variables
+#    Required: LDES, SPARQL_ENDPOINT
+#    Optional: SHAPE, TARGET_GRAPH, FOLLOW, MATERIALIZE, etc.
+
+# Folder or file path for LDES configuration (leave empty for direct mode)
+LDES_CONFIG_PATH=/data/ldes-feeds
+
+# Docker image to use for ldes2sparql containers (folder/legacy modes only)
 LDES2SPARQL_IMAGE=ghcr.io/rdf-connect/ldes2sparql:latest
+
+# Logging level
 LOG_LEVEL=INFO
+
+# Direct mode environment variables (only used if LDES_CONFIG_PATH is not set)
+# LDES=http://example.com/ldes-feed
+# SPARQL_ENDPOINT=http://graphdb:7200/repositories/kgap/statements
+# SHAPE=
+# TARGET_GRAPH=
+# FOLLOW=true
+# MATERIALIZE=false
+# ORDER=none
+# POLLING_FREQUENCY=5000
+# FAILURE_IS_FATAL=false
+# CONCURRENT_FETCHES=10
+# FOR_VIRTUOSO=false
+# QUERY_TIMEOUT=1800
+# LAST_VERSION_ONLY=false

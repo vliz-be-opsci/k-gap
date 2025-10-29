@@ -1,0 +1,56 @@
+# Example individual LDES feed configuration
+# This file can be placed in a directory and watched by the folder watcher
+
+# Required fields
+url: http://example.com/ldes-feed
+sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+
+# Optional fields
+
+# Polling interval in seconds (converted to POLLING_FREQUENCY in milliseconds)
+polling_interval: 60
+
+# SHACL shape file for validation (leave empty if not needed)
+shape: ""
+
+# Target named graph in the SPARQL endpoint (leave empty for default graph)
+target_graph: ""
+
+# Whether to follow the LDES stream (true/false)
+follow: true
+
+# Whether to materialize the LDES members (true/false)
+materialize: false
+
+# Ordering mode: none, asc, desc
+order: none
+
+# Whether to only keep the last version of each member (true/false)
+last_version_only: false
+
+# Whether a failure should stop the container (true/false)
+failure_is_fatal: false
+
+# Number of concurrent HTTP fetches
+concurrent_fetches: 10
+
+# Whether to use Virtuoso-specific optimizations (true/false)
+for_virtuoso: false
+
+# SPARQL query timeout in seconds
+query_timeout: 1800
+
+# Optional: Timestamp filters (ISO 8601 format)
+# before: "2025-12-31T23:59:59.000Z"
+# after: "2024-01-01T00:00:00.000Z"
+
+# Optional: Access token for endpoints that require authentication (e.g., Qlever)
+# access_token: "your-token-here"
+
+# Optional: Performance monitoring name
+# perf_name: "my-feed-performance"
+
+# Optional: Additional custom environment variables
+environment:
+  # Add any additional environment variables here
+  # CUSTOM_VAR: "custom_value"
