@@ -357,6 +357,41 @@ curl -X POST \
 
 The validation report is returned in the requested RDF format (Turtle, RDF/XML, JSON-LD, etc.).
 
+#### Using the Python Module
+
+For Python scripts and Jupyter notebooks, K-GAP provides a Python module for SHACL validation:
+
+```python
+from kgap_shacl import validate_repository
+
+# Validate entire repository
+report = validate_repository()
+
+if report.conforms:
+    print("✓ Data is valid!")
+else:
+    print(f"✗ Found {len(report.violations)} violations")
+    report.print_report()
+
+# Validate specific named graph
+report = validate_repository(named_graph="http://example.org/my-graph")
+```
+
+The Python module is available at the repository root as `kgap_shacl.py` and can be used from:
+- Jupyter notebooks (see `docs/examples/shacl/shacl-validation-example.ipynb`)
+- Sembench processing scripts
+- Custom Python applications
+
+**Command-line usage:**
+```bash
+# From within a container that has Python and requests installed
+python3 /workspace/kgap_shacl.py [repository] [named_graph]
+
+# Examples
+python3 /workspace/kgap_shacl.py kgap
+python3 /workspace/kgap_shacl.py kgap http://example.org/my-graph
+```
+
 #### SHACL Shapes
 
 To use SHACL validation, you need to have SHACL shapes defined in your repository. SHACL shapes define the constraints that your RDF data should conform to.
@@ -383,6 +418,12 @@ ex:PersonShape
 ```
 
 Import your SHACL shapes into GraphDB using any of the standard import methods (web interface, REST API, etc.).
+
+**Example shapes:** K-GAP includes example SHACL shape files in `docs/examples/shacl/`:
+- `person-shape.ttl` - Validates Person entities (name, email, age constraints)
+- `organization-shape.ttl` - Validates Organization entities
+
+**Example notebook:** See `docs/examples/shacl/shacl-validation-example.ipynb` for a complete Jupyter notebook demonstrating SHACL validation with sample data.
 
 #### Validation Report Format
 
