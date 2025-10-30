@@ -7,6 +7,7 @@ K-GAP is a microservices-based platform for building, managing, and analyzing kn
 ## Quick Navigation
 
 - **[Quick Reference](./quick-reference.md)** - Common commands and patterns
+- **[SHACL Validation Guide](./shacl-validation-guide.md)** - Data validation with SHACL
 - **[FAQ](./faq.md)** - Frequently asked questions
 - **[Advanced Topics](./advanced-topics.md)** - Advanced usage patterns
 - **[GitHub Pages Setup](./GITHUB_PAGES.md)** - Publishing this documentation

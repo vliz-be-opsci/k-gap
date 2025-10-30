@@ -53,6 +53,7 @@ See the example files in this directory:
 
 ## Learn More
 
+- [SHACL Validation Quick Reference Guide](../../shacl-validation-guide.md)
 - [SHACL Specification](https://www.w3.org/TR/shacl/)
 - [GraphDB SHACL Documentation](https://graphdb.ontotext.com/documentation/latest/shacl-validation.html)
 - [SHACL Playground](https://shacl.org/playground/)
