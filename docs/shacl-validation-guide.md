@@ -18,6 +18,7 @@ First, create SHACL shapes that define constraints for your data:
 ```turtle
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex: <http://example.org/> .
 
 ex:PersonShape
     a sh:NodeShape ;
@@ -198,7 +199,7 @@ sh:property [
 ```turtle
 sh:property [
     sh:path ex:email ;
-    sh:pattern "^.+@.+\\..+$" ;
+    sh:pattern "^.+@.+\\.+$" ;
 ] .
 ```
 
@@ -252,12 +253,14 @@ docker ps --format '{{.Names}}' | grep graphdb
 - [SHACL Playground](https://shacl.org/playground/) - Test shapes online
 - [K-GAP GraphDB Documentation](../components/graphdb.md)
 
-## Integration Points
+## Integration with K-GAP Components
 
-SHACL validation can be integrated with:
+SHACL validation integrates seamlessly with all K-GAP components:
 
-1. **CI/CD Pipelines** - Validate data quality in automated workflows
-2. **Sembench** - Run validation as part of scheduled processing
-3. **Jupyter Notebooks** - Interactive data quality exploration
-4. **Custom Scripts** - Automated data quality monitoring
-5. **GraphDB Workbench** - Manual validation via web interface
+- **CI/CD Pipelines** - Use bash scripts with exit codes for automated quality gates
+- **Sembench** - Schedule periodic validation using the Python module
+- **Jupyter Notebooks** - Interactive data quality exploration and analysis
+- **Custom Scripts** - Build automated monitoring and alerting workflows
+- **GraphDB Workbench** - Manual validation and debugging via web interface
+
+See the [Common Use Cases](#common-use-cases) section above for detailed examples.
