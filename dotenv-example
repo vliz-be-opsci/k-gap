@@ -23,23 +23,19 @@ SEMBENCH_HOME_PATH=/data
 SEMBENCH_CONFIG_PATH=/data/sembench.yaml
 SCHEDULER_INTERVAL_SECONDS=86400
 
-# ldes-consumer env variables
-# Configuration mode options:
-# 1. Folder mode: Set LDES_CONFIG_PATH to a directory containing individual YAML files
-#    Example: LDES_CONFIG_PATH=/data/ldes-feeds
-# 2. Legacy mode: Set LDES_CONFIG_PATH to a single YAML file
-#    Example: LDES_CONFIG_PATH=/data/ldes-feeds.yaml
-# 3. Spawned instance mode: Set LDES and SPARQL_ENDPOINT directly
-#    This is automatically used by spawned containers
+# ldes-coordinator env variables
+# The coordinator watches a folder for YAML config files and spawns
+# ldes-consumer containers for each feed configuration
 
-# Folder or file path for LDES configuration (master spawner mode)
+# Folder path for LDES feed configurations (coordinator mode)
 LDES_CONFIG_PATH=/data/ldes-feeds
 
 # Logging level
 LOG_LEVEL=INFO
 
-# Spawned instance environment variables (used by actual ldes2sparql containers)
-# These are set automatically when spawning from YAML configs
+# Consumer instance environment variables (automatically set by coordinator)
+# These are set when the coordinator spawns individual consumer containers
+# from YAML config files. You don't need to set these manually.
 # LDES=http://example.com/ldes-feed
 # SPARQL_ENDPOINT=http://graphdb:7200/repositories/kgap/statements
 # SHAPE=

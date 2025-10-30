@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /**
- * LDES Consumer Spawner
- * Manages spawning and monitoring of ldes2sparql container instances
+ * LDES Coordinator Spawner
+ * Manages spawning and monitoring of ldes2sparql consumer container instances
  */
 
 const fs = require('fs');
 const path = require('path');
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
-// Configuration
+// Configuration from environment (passed by entrypoint.sh)
 const LDES_CONFIG_PATH = process.env.LDES_CONFIG_PATH || '';
-const DOCKER_NETWORK = process.env.DOCKER_NETWORK || 'kgap_default';
-const COMPOSE_PROJECT_NAME = process.env.COMPOSE_PROJECT_NAME || 'kgap';
+const DOCKER_IMAGE = process.env.DOCKER_IMAGE;
+const DOCKER_NETWORK = process.env.DOCKER_NETWORK;
+const COMPOSE_PROJECT_NAME = process.env.COMPOSE_PROJECT_NAME;
 const LOG_LEVEL = process.env.LOG_LEVEL || 'INFO';
 const LOCK_FILE = path.join(LDES_CONFIG_PATH, '.spawn.lock');
 
@@ -27,24 +28,7 @@ function log(level, ...args) {
     const currentLevel = levels[LOG_LEVEL] || 1;
     
     if (levels[level] >= currentLevel) {
-        console.log(`${timestamp} - ldes-spawner - ${level} -`, ...args);
-    }
-}
-
-// Get own container info from hostname
-async function getOwnContainerInfo() {
-    try {
-        const hostname = require('os').hostname();
-        const { stdout } = await execAsync(`docker inspect ${hostname}`);
-        const info = JSON.parse(stdout)[0];
-        return {
-            id: info.Id,
-            name: info.Name.replace('/', ''),
-            image: info.Config.Image
-        };
-    } catch (error) {
-        log('ERROR', 'Failed to get own container info:', error.message);
-        throw error;
+        console.log(`${timestamp} - ldes-coordinator - ${level} -`, ...args);
     }
 }
 
@@ -157,7 +141,7 @@ function getContainerName(filename) {
 }
 
 // Spawn a container from YAML config
-async function spawnContainer(yamlPath, ownImage) {
+async function spawnContainer(yamlPath) {
     const filename = path.basename(yamlPath);
     
     if (activeContainers.has(filename)) {
@@ -206,8 +190,8 @@ async function spawnContainer(yamlPath, ownImage) {
     if (config.access_token) dockerArgs.push('-e', `ACCESS_TOKEN=${config.access_token}`);
     if (config.perf_name) dockerArgs.push('-e', `PERF_NAME=${config.perf_name}`);
     
-    // Use own image
-    dockerArgs.push(ownImage);
+    // Use the image passed from entrypoint
+    dockerArgs.push(DOCKER_IMAGE);
     
     log('DEBUG', 'Docker command:', 'docker', dockerArgs.join(' '));
     
@@ -259,7 +243,7 @@ async function stopContainer(filename) {
 }
 
 // Watch folder for changes
-async function watchFolder(folder, ownImage) {
+async function watchFolder(folder) {
     log('INFO', `Scanning directory for YAML files: ${folder}`);
     
     // Initial scan - start containers for existing files
@@ -268,13 +252,13 @@ async function watchFolder(folder, ownImage) {
         .filter(f => f !== '.spawn.lock');
     
     for (const file of files) {
-        await spawnContainer(path.join(folder, file), ownImage);
+        await spawnContainer(path.join(folder, file));
     }
     
     log('INFO', 'File watcher started. Monitoring for changes...');
     
     // Watch for file changes
-    const watcher = fs.watch(folder, async (eventType, filename) => {
+    fs.watch(folder, async (eventType, filename) => {
         if (!filename || (!filename.endsWith('.yaml') && !filename.endsWith('.yml'))) {
             return;
         }
@@ -290,7 +274,7 @@ async function watchFolder(folder, ownImage) {
             // File created or deleted
             if (fs.existsSync(filePath)) {
                 log('INFO', `Detected new YAML file: ${filename}`);
-                await spawnContainer(filePath, ownImage);
+                await spawnContainer(filePath);
             } else {
                 log('INFO', `Detected deleted YAML file: ${filename}`);
                 await stopContainer(filename);
@@ -302,7 +286,7 @@ async function watchFolder(folder, ownImage) {
                 await stopContainer(filename);
             }
             if (fs.existsSync(filePath)) {
-                await spawnContainer(filePath, ownImage);
+                await spawnContainer(filePath);
             }
         }
     });
@@ -318,7 +302,7 @@ async function watchFolder(folder, ownImage) {
                     
                     const yamlPath = path.join(folder, filename);
                     if (fs.existsSync(yamlPath)) {
-                        await spawnContainer(yamlPath, ownImage);
+                        await spawnContainer(yamlPath);
                     }
                 }
             } catch (error) {
@@ -329,118 +313,6 @@ async function watchFolder(folder, ownImage) {
     
     // Keep process alive
     process.stdin.resume();
-}
-
-// Parse legacy config file
-async function parseLegacyFile(configFile, ownImage) {
-    log('INFO', 'Parsing legacy configuration file...');
-    
-    const content = fs.readFileSync(configFile, 'utf8');
-    const lines = content.split('\n');
-    
-    const feeds = [];
-    let currentFeed = null;
-    let inFeeds = false;
-    
-    for (const line of lines) {
-        if (line.match(/^feeds:/)) {
-            inFeeds = true;
-            continue;
-        }
-        
-        if (inFeeds) {
-            if (line.match(/^  - name:/)) {
-                if (currentFeed) {
-                    feeds.push(currentFeed);
-                }
-                currentFeed = { name: line.replace(/^  - name:\s*/, '').trim() };
-            } else if (line.match(/^    \w+:/)) {
-                const [key, ...valueParts] = line.trim().split(':');
-                const value = valueParts.join(':').trim().replace(/^["']|["']$/g, '');
-                currentFeed[key] = value;
-            }
-        }
-    }
-    
-    if (currentFeed) {
-        feeds.push(currentFeed);
-    }
-    
-    if (feeds.length === 0) {
-        log('ERROR', 'No feeds defined in configuration file');
-        process.exit(1);
-    }
-    
-    log('INFO', `Found ${feeds.length} feed(s) to process`);
-    
-    // Spawn containers for each feed
-    for (const feed of feeds) {
-        await spawnLegacyFeed(feed, ownImage);
-    }
-    
-    log('INFO', `Successfully started ${feeds.length} LDES consumer(s)`);
-}
-
-// Spawn container from legacy feed config
-async function spawnLegacyFeed(feed, ownImage) {
-    const feedName = feed.name || 'unnamed';
-    const url = feed.url;
-    const sparqlEndpoint = feed.sparql_endpoint;
-    
-    if (!url || !sparqlEndpoint) {
-        log('ERROR', `Feed '${feedName}' is missing required 'url' or 'sparql_endpoint'`);
-        return false;
-    }
-    
-    const containerName = `ldes-consumer-${feedName}`;
-    const pollingInterval = parseInt(feed.polling_interval || '60');
-    const pollingFrequency = pollingInterval * 1000;
-    
-    log('INFO', `Starting LDES consumer for feed: ${feedName}`);
-    log('INFO', `  URL: ${url}`);
-    log('INFO', `  SPARQL Endpoint: ${sparqlEndpoint}`);
-    
-    const dockerArgs = [
-        'run', '-d',
-        '--name', containerName,
-        '--network', DOCKER_NETWORK,
-        '--label', `com.docker.compose.project=${COMPOSE_PROJECT_NAME}`,
-        '--label', 'com.docker.compose.service=ldes-consumer',
-        '-v', `/data/ldes-state-${feedName}:/state`,
-        '-e', `LDES=${url}`,
-        '-e', `SPARQL_ENDPOINT=${sparqlEndpoint}`,
-        '-e', `SHAPE=${feed.shape || ''}`,
-        '-e', `TARGET_GRAPH=${feed.target_graph || ''}`,
-        '-e', `FOLLOW=${feed.follow || 'true'}`,
-        '-e', `MATERIALIZE=${feed.materialize || 'false'}`,
-        '-e', `ORDER=${feed.order || 'none'}`,
-        '-e', `LAST_VERSION_ONLY=${feed.last_version_only || 'false'}`,
-        '-e', `FAILURE_IS_FATAL=${feed.failure_is_fatal || 'false'}`,
-        '-e', `POLLING_FREQUENCY=${pollingFrequency}`,
-        '-e', `CONCURRENT_FETCHES=${feed.concurrent_fetches || '10'}`,
-        '-e', `FOR_VIRTUOSO=${feed.for_virtuoso || 'false'}`,
-        '-e', `QUERY_TIMEOUT=${feed.query_timeout || '1800'}`,
-        ownImage
-    ];
-    
-    try {
-        await execAsync(`docker ${dockerArgs.join(' ')}`);
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        const { stdout } = await execAsync(`docker inspect -f '{{.State.Running}}' ${containerName}`);
-        if (stdout.trim() === 'true') {
-            log('INFO', `Successfully started container: ${containerName}`);
-            activeContainers.set(feedName, containerName);
-            return true;
-        } else {
-            log('ERROR', `Container ${containerName} failed to start`);
-            return false;
-        }
-    } catch (error) {
-        log('ERROR', `Failed to spawn container for feed '${feedName}':`, error.message);
-        return false;
-    }
 }
 
 // Cleanup on exit
@@ -458,41 +330,31 @@ async function cleanup() {
 // Main function
 async function main() {
     try {
+        log('INFO', 'LDES Coordinator starting...');
+        log('INFO', `Using image: ${DOCKER_IMAGE}`);
+        log('INFO', `Using network: ${DOCKER_NETWORK}`);
+        log('INFO', `Using project: ${COMPOSE_PROJECT_NAME}`);
+        
         // Acquire lock
         await acquireLock();
         
-        // Get own container info
-        const ownInfo = await getOwnContainerInfo();
-        log('INFO', `Running in container: ${ownInfo.name}`);
-        log('INFO', `Using image: ${ownInfo.image}`);
-        
         // Determine mode based on LDES_CONFIG_PATH
-        if (fs.statSync(LDES_CONFIG_PATH).isDirectory()) {
+        if (!fs.existsSync(LDES_CONFIG_PATH)) {
+            log('ERROR', `LDES_CONFIG_PATH does not exist: ${LDES_CONFIG_PATH}`);
+            process.exit(1);
+        }
+        
+        const stats = fs.statSync(LDES_CONFIG_PATH);
+        
+        if (stats.isDirectory()) {
             // Folder mode
             log('INFO', `Folder mode: watching ${LDES_CONFIG_PATH}`);
-            await watchFolder(LDES_CONFIG_PATH, ownInfo.image);
-        } else if (fs.statSync(LDES_CONFIG_PATH).isFile()) {
-            // Legacy file mode
-            log('INFO', `Legacy mode: reading ${LDES_CONFIG_PATH}`);
-            await parseLegacyFile(LDES_CONFIG_PATH, ownInfo.image);
-            
-            // Monitor containers
-            log('INFO', 'Monitoring containers... (Press Ctrl+C to stop)');
-            setInterval(async () => {
-                for (const [feedName, containerName] of activeContainers.entries()) {
-                    try {
-                        const { stdout } = await execAsync(`docker inspect -f '{{.State.Running}}' ${containerName}`);
-                        if (stdout.trim() !== 'true') {
-                            log('WARNING', `Container ${containerName} is not running`);
-                        }
-                    } catch (error) {
-                        log('ERROR', `Error checking container ${containerName}:`, error.message);
-                    }
-                }
-            }, 30000);
-            
-            // Keep process alive
-            process.stdin.resume();
+            await watchFolder(LDES_CONFIG_PATH);
+        } else if (stats.isFile()) {
+            log('ERROR', 'Single file mode is no longer supported');
+            log('ERROR', 'Please use folder mode with individual YAML files');
+            log('ERROR', 'See /kgap/feed-config.yaml.example for template');
+            process.exit(1);
         } else {
             log('ERROR', `LDES_CONFIG_PATH is neither a file nor directory: ${LDES_CONFIG_PATH}`);
             process.exit(1);
