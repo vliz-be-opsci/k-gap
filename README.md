@@ -78,10 +78,11 @@ K-GAP consists of four main Docker images:
 
 ### kgap-graphdb
 
-GraphDB is the core RDF triple store providing SPARQL query capabilities and persistent storage.
+GraphDB is the core RDF triple store providing SPARQL query capabilities, persistent storage, and SHACL validation.
 
 - **Base**: `ontotext/graphdb:10.4.4`
 - **Port**: 7200
+- **Features**: SPARQL queries, SHACL validation, full-text search
 - **Docs**: [GraphDB Component](docs/components/graphdb.md)
 
 ### kgap-jupyter

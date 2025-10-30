@@ -216,6 +216,7 @@ graphdb/
 └── kgap/
     ├── entrypoint-wrap.sh       # Startup script
     ├── healthy.sh               # Health check script
+    ├── validate-shacl.sh        # SHACL validation script
     └── template-repo-config.ttl # Repository configuration template
 ```
 
@@ -245,6 +246,23 @@ Simple health check that verifies GraphDB is responding:
 # Checks if GraphDB is responding to HTTP requests
 curl -f http://localhost:7200/ > /dev/null 2>&1
 ```
+
+### validate-shacl.sh
+
+SHACL validation script that triggers GraphDB's validation endpoint:
+
+```bash
+#!/bin/bash
+# Triggers SHACL validation and displays the validation report
+# Usage: validate-shacl.sh [REPOSITORY] [NAMED_GRAPH]
+# Environment variables: GDB_HOST, GDB_PORT, GDB_REPO
+```
+
+This script:
+1. Accepts optional repository name and named graph parameters
+2. Calls GraphDB's `/repositories/{repo}/shacl/validate` endpoint
+3. Displays the validation report in Turtle format
+4. Returns appropriate exit codes (0 for success, 1 for violations/errors)
 
 ## Common Operations
 
@@ -280,6 +298,118 @@ curl -X POST \
   http://localhost:7200/repositories/kgap/statements \
   -H 'Content-Type: application/x-trig' \
   --data-binary '@backup.trig'
+```
+
+### SHACL Validation
+
+GraphDB provides built-in SHACL validation capabilities. K-GAP includes convenient scripts to trigger SHACL validation and retrieve validation reports.
+
+#### Using the Host Script
+
+From the host machine (outside the container), use the provided script:
+
+```bash
+# Validate the default repository (all graphs)
+./validate-shacl-host.sh
+
+# Validate a specific repository
+./validate-shacl-host.sh kgap
+
+# Validate a specific named graph within a repository
+./validate-shacl-host.sh kgap http://example.org/my-graph
+```
+
+The script will:
+1. Execute validation inside the GraphDB container
+2. Display the validation report in Turtle format
+3. Return exit code 0 if validation passes (no violations)
+4. Return exit code 1 if validation finds constraint violations
+
+#### Using the Container Script
+
+From inside the GraphDB container:
+
+```bash
+# Validate the default repository
+docker exec test_kgap_graphdb /kgap/validate-shacl.sh
+
+# Validate with parameters
+docker exec test_kgap_graphdb /kgap/validate-shacl.sh kgap http://example.org/my-graph
+```
+
+#### Using the REST API Directly
+
+Trigger SHACL validation via the GraphDB REST API:
+
+```bash
+# Validate all graphs
+curl -X POST \
+  http://localhost:7200/repositories/kgap/shacl/validate \
+  -H 'Accept: text/turtle'
+
+# Validate a specific named graph
+curl -X POST \
+  http://localhost:7200/repositories/kgap/shacl/validate \
+  -H 'Accept: text/turtle' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'context=http://example.org/my-graph'
+```
+
+The validation report is returned in the requested RDF format (Turtle, RDF/XML, JSON-LD, etc.).
+
+#### SHACL Shapes
+
+To use SHACL validation, you need to have SHACL shapes defined in your repository. SHACL shapes define the constraints that your RDF data should conform to.
+
+**Example SHACL shape:**
+```turtle
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+
+ex:PersonShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path ex:name ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path ex:email ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^.+@.+\\..+$" ;
+    ] .
+```
+
+Import your SHACL shapes into GraphDB using any of the standard import methods (web interface, REST API, etc.).
+
+#### Validation Report Format
+
+The validation report follows the SHACL specification and includes:
+- `sh:conforms`: Boolean indicating if data conforms to all shapes
+- `sh:result`: List of validation results (constraint violations)
+- Each result includes:
+  - `sh:focusNode`: The node that violates the constraint
+  - `sh:resultPath`: The property path where the violation occurred
+  - `sh:resultSeverity`: Severity level (Violation, Warning, Info)
+  - `sh:resultMessage`: Human-readable description of the violation
+
+**Example validation report:**
+```turtle
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+[]
+    a sh:ValidationReport ;
+    sh:conforms false ;
+    sh:result [
+        a sh:ValidationResult ;
+        sh:focusNode <http://example.org/person1> ;
+        sh:resultPath <http://example.org/name> ;
+        sh:resultSeverity sh:Violation ;
+        sh:sourceConstraintComponent sh:MinCountConstraintComponent ;
+        sh:resultMessage "MinCount constraint violation: expected 1, found 0" ;
+    ] .
 ```
 
 ## Troubleshooting
