@@ -1,5 +1,12 @@
-#sparql by template
-pykg2tbl
-#visualisation packages
+#sparql by template from py-sema
+git+https://github.com/vliz-be-opsci/py-sema.git
+rdflib
+
+#useful jupyter data analysis stuff
 matplotlib
 seaborn
+jupyter
+jupyterlab
+jupyterlab_widgets
+numpy
+pandas

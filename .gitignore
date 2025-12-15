@@ -4,6 +4,8 @@
 # Data directories
 /data/*
 !/data/.gitkeep
+/notebooks/*
+!/notebooks/.gitkeep
 
 # Notebook checkpoints
 .ipynb_checkpoints/
