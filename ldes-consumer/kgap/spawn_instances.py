@@ -10,6 +10,7 @@ import subprocess
 import signal
 import time
 from typing import List, Dict, Any
+from pathlib import Path
 
 from logger import setup_logger
 
@@ -151,16 +152,18 @@ def spawn_ldes2sparql_instance(
                 return proc
             else:
                 # Container failed to start or is not running
-                logger.error(f"Container '{container_name}' failed to start properly")
-                # allocate filenames to capture stdout and stderr
-                stdout_file = f"/data/logs/{container_name}_stdout.log"
-                stderr_file = f"/data/logs/{container_name}_stderr.log"
-
+                logger.error(f"Container '{container_name}' failed to start properly. Capturing logs...")
                 # Try to get logs
                 capture_logs_cmd = ["docker", "logs", container_name]
-                capture_logs = subprocess.run(capture_logs_cmd, stdout=stdout_file, stderr=stderr_file)
-                capture_logs.wait()
-                logger.error(f"Container logs can be found in data/logs/{container_name}_*.log")
+                # allocate filenames to capture stdout and stderr
+                Path("/data/logs").mkdir(parents=True, exist_ok=True)
+                stdout_log = f"/data/logs/{container_name}_stdout.log"
+                stderr_log = f"/data/logs/{container_name}_stderr.log"
+
+                with open(stdout_log, "w") as stdout_file, open(stderr_log, "w") as stderr_file:
+                    capture_logs = subprocess.run(capture_logs_cmd, stdout=stdout_file, stderr=stderr_file, timeout=5)
+                    if capture_logs.returncode == 0:
+                        logger.error(f"Container logs can be found in data/logs/{container_name}_*.log")
                 return None
         except subprocess.TimeoutExpired:
             logger.error(f"Timeout checking container status for '{container_name}'")
