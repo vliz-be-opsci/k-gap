@@ -7,7 +7,7 @@ LDES2SPARQL_IMAGE="${LDES2SPARQL_IMAGE:-ghcr.io/rdf-connect/ldes2sparql:latest}"
 
 # Wrapper echo function
 wecho() {
-    echo "wrapper: $1"
+    echo "ldes-consumer-wrapper: $1"
 }
 
 # Check if config file exists
@@ -42,6 +42,17 @@ trap 'signal_child "TERM" 143' SIGTERM
 trap 'signal_child "INT" 130' SIGINT
 
 wecho "yielding to child process to spawn instances..."
+# Ensure state and logs directories exist
+mkdir -p /data/ldes-consumer/state
+mkdir -p /data/ldes-consumer/logs
+wecho "Clearing logs directory..."
+rm -rf /data/ldes-consumer/logs/*
+
+if [ "${LDES_CLEAR_STATE:-0}" = "1" ]; then
+    wecho "Clearing state directory as LDES_CLEAR_STATE is set to 1"
+    rm -rf /data/ldes-consumer/state/*
+fi
+
 # Start the child process and capture its PID
 # Parse YAML and start ldes2sparql instances
 /usr/bin/env python3 /kgap/spawn_instances.py "$LDES_CONFIG_FILE" &

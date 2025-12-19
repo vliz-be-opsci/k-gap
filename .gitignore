@@ -4,6 +4,7 @@
 # Data directories
 /data/*
 !/data/.gitkeep
+!/data/graphdb/import/.gitkeep
 /notebooks/*
 !/notebooks/.gitkeep
 

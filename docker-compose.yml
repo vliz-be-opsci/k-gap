@@ -19,13 +19,12 @@ services:
       - ./.env
     environment: 
       - GDB_JAVA_OPTS=-Xms8g -Xmx16g -Dcom.ontotext.graphdb.monitoring.jmx=true
-      #GDB_REPO: kgap                       # default should be changed to reflect the name of your particular case
-      #GDB_HOME_FOLDER: /opt/graphdb/home/  # default might be changed to externalise/persist the storage 
     ports:
       - 7200:7200     # HTTP
     cpus: 4
     volumes:
-      - ./data:/root/graphdb-import/data
+      - ./data:/data
+      - ./data/graphdb-import:/root/graphdb-import/data
       # todo later - consider mounted volumes for persistence of data ?
     # For heavy-feature GraphDB repos that take longer to initialize, override healthcheck:
     # healthcheck:
@@ -86,6 +85,7 @@ services:
       - ./.env
     environment:
       - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-kgap}_default
+      - HOST_PWD=${PWD}
     depends_on:
       graphdb:
         condition: service_healthy
