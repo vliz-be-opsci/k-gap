@@ -1,0 +1,21 @@
+# LDES feeds configuration file
+# format yml using only one 'feeds' key at the root level (for now)
+# feeds:
+#   «your-unique-feedname»:
+#     url: «ldes-url»   # mandatory, all the rest is optional
+#     sparql_endpoint: http://graphdb:7200/repositories/your-repo-name/statements  # update endpoint, defaults to KGAP repo
+#     target_graph: http://your-target-graph-uri/  # named graph to fill, defaults to urn based on feedname
+#     polling_frequency: 60  # ldes polling frequency, in seconds, defaults to 60 (1 minute)
+#     environment: # extra env vars - see documentation at https://github.com/rdf-connect/ldes2sparql
+#       MATERIALIZE: "true" # or "false"
+#       SHAPE: "/data/your-shape-file.ttl"   # can be url or local path inside /data volume mapped to ./data
+feeds:
+  bodc-P02:
+    url: http://vocab.nerc.ac.uk/ldes/P02/
+    environment:
+      MATERIALIZE: "false"
+  mtt-P02-NL:
+    url: https://marine-term-translations.github.io/P02-NL/LDES/latest.ttl
+    environment:
+      MATERIALIZE: "true"
+      SHAPE: "/data/mtt-bodc-shape.ttl"

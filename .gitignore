@@ -5,6 +5,7 @@
 /data/*
 !/data/.gitkeep
 !/data/graphdb/import/.gitkeep
+!/data/*-example.*
 /notebooks/*
 !/notebooks/.gitkeep
 

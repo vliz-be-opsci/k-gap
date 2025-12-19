@@ -144,29 +144,44 @@ def docker_container_start(feedname: str, feed: dict, image_name: str, project_n
         "--label",
         "com.docker.compose.service=ldes-consumer",
         "-v",
+        f"{host_data_path}:/data",
+        "-v",
         f"{host_state_path}/{feedname}:/state",
     ]
 
     # Add environment variables
     cmd.extend(["-e", f"LDES={feed_url}"])
     cmd.extend(["-e", f"SPARQL_ENDPOINT={sparql_endpoint}"])
-    cmd.extend(["-e", "SHAPE="])
     cmd.extend(["-e", f"TARGET_GRAPH={target_graph}"])
+    cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
     cmd.extend(["-e", "FAILURE_IS_FATAL=false"])
     cmd.extend(["-e", "FOLLOW=true"])
-    cmd.extend(["-e", "MATERIALIZE=true"])
-    cmd.extend(["-e", f"LOG_LEVEL={ldes_loglevel}"])
-    cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
 
     # Add any additional environment variables from the feed config
+    added_envs: set[str] = set()
     extra_env = feed.get("environment", {})
     if isinstance(extra_env, dict):
         for key, value in extra_env.items():
+            if key in {"LDES", "SPARQL_ENDPOINT", "TARGET_GRAPH", "FAILURE_IS_FATAL", "FOLLOW", "POLLING_FREQUENCY"}:
+                log.warning(
+                    f"Environment variable '{key}' for feed '{feedname}' is reserved and cannot be overridden; ignoring..."
+                )
+                continue
             cmd.extend(["-e", f"{key}={value}"])
+            added_envs.add(key)
     else:
         log.warning(
             f"'environment' for feed '{feedname}' is not a mapping; ignoring..."
         )
+    # Ensure SHAPE is set, even if empty
+    if "SHAPE" not in added_envs:
+        cmd.extend(["-e", "SHAPE="])
+    # Ensure MATERIALIZE is set, even if empty
+    if "MATERIALIZE" not in added_envs:
+        cmd.extend(["-e", "MATERIALIZE=true"])
+    # Ensure LOG_LEVEL is set correctly
+    if "LOG_LEVEL" not in added_envs:
+        cmd.extend(["-e", f"LOG_LEVEL={ldes_loglevel}"])
 
     # Add the image name
     cmd.append(image_name)
