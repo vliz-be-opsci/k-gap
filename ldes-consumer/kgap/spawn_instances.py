@@ -16,8 +16,9 @@ from logger import setup_logger, Logger
 
 # === Global config / data and logger setup ===
 # Set up logger
-loglevel = os.getenv("LOG_LEVEL", "INFO")
-log: Logger = setup_logger("ldes-consumer", loglevel)
+loglevel: str = os.getenv("LOG_LEVEL", "INFO")
+pfx: str = os.getenv("LDES_CONSUMER_PREFIX", "ldes-consumer")
+log: Logger = setup_logger(pfx, loglevel)
 
 # Get configuration options
 # note that js based ldes2sparql expects lowercase log levels
@@ -55,7 +56,7 @@ feeds: dict[str, dict] = None
 # === Docker container management functions ===
 def docker_container_name(feedname: str) -> str:
     """Generate the Docker container name for a given feed."""
-    return f"ldes-consumer-{feedname}"
+    return f"{pfx}-{feedname}"
 
 
 @contextmanager

@@ -4,10 +4,11 @@ set -e
 # Environment variables
 LDES_CONFIG_FILE="${LDES_CONFIG_FILE:-/data/ldes-feeds.yaml}"
 LDES2SPARQL_IMAGE="${LDES2SPARQL_IMAGE:-ghcr.io/rdf-connect/ldes2sparql:latest}"
+LDES_CONSUMER_PREFIX="${LDES_CONSUMER_PREFIX:-ldes-consumer}"
 
 # Wrapper echo function
 wecho() {
-    echo "ldes-consumer-wrapper: $1"
+    echo "${LDES_CONSUMER_PREFIX}-wrapper: $1"
 }
 
 # Check if config file exists
