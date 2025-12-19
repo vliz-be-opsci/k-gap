@@ -27,6 +27,10 @@ image_name: str = os.getenv(
     "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"           # default image
 )
 project_name: str = os.getenv("COMPOSE_PROJECT_NAME", "kgap")               # default kgap
+gdb_repo: str = os.getenv("GDB_REPO", "kgap")                               # default kgap
+default_sparql_endpoint: str = os.getenv(
+    "DEFAULT_SPARQL_ENDPOINT", f"http://graphdb:7200/repositories/{gdb_repo}/statements"
+)                                                                           # default endpoint for updates
 network_name: str = os.getenv("DOCKER_NETWORK", f"{project_name}_default")  # default network name derived from compose project name
 remove_containers: bool = os.getenv("LDES_REMOVE_CONTAINERS", "1") == "1"   # default to true
 monitor_interval: int = int(os.getenv("LDES_MONITOR_INTERVAL", "300"))      # in seconds, default 5 minutes
@@ -119,8 +123,8 @@ def docker_container_start(feedname: str, feed: dict, image_name: str, project_n
     """Start a Docker container for a given feed."""
     # 1| get relevant parts from feed config
     feed_url = feed.get("url")
-    sparql_endpoint = feed.get("sparql_endpoint")
-    target_graph = feed.get("target_graph", f"urn:kgap:ldes-consumer:{feedname}")
+    sparql_endpoint = feed.get("sparql_endpoint", default_sparql_endpoint)
+    target_graph = feed.get("target_graph", f"urn:kgap:{pfx}:{feedname}")
     container_name = docker_container_name(feedname)
     # Note: The config uses 'polling_interval' (seconds) for user-friendliness,
     # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
@@ -319,9 +323,6 @@ def spawn_feed_instance(
 
     if "url" not in feed:
         fail_feed(feedname, feed, "Missing URL in feed configuration")
-        return
-    if "sparql_endpoint" not in feed:
-        fail_feed(feedname, feed, "Missing SPARQL endpoint in feed configuration")
         return
 
     with check_docker_container_running(feedname, feed) as is_running:

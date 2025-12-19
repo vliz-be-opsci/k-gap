@@ -84,8 +84,9 @@ services:
     env_file:
       - ./.env
     environment:
-      - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-kgap}_default
-      - HOST_PWD=${PWD}
+      DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-kgap}_default
+      HOST_PWD: ${PWD}
+      DEFAULT_SPARQL_ENDPOINT: "http://graphdb:7200/repositories/${GDB_REPO:-kgap}/statements" # for updates
     depends_on:
       graphdb:
         condition: service_healthy
