@@ -61,6 +61,8 @@ child=$! #
 wecho "started spawn-instances with pid $child"
 
 # Wait for the child process to exit
-wait "$child"
-wecho "spawn-instances exited with status $?"
+wait "$child" || true
+child_status=$?
+wecho "spawn-instances exited with status $child_status"
+exit $child_status
 

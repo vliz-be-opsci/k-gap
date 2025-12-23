@@ -11,7 +11,7 @@ import signal
 import time
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, Any
 from logger import setup_logger, Logger
 
 # === Global config / data and logger setup ===
@@ -24,21 +24,29 @@ log: Logger = setup_logger(pfx, loglevel)
 # note that js based ldes2sparql expects lowercase log levels
 ldes_loglevel = os.getenv("LDES_LOG_LEVEL", loglevel).lower()
 image_name: str = os.getenv(
-    "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"           # default image
+    "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"  # default image
 )
-project_name: str = os.getenv("COMPOSE_PROJECT_NAME", "kgap")               # default kgap
-gdb_repo: str = os.getenv("GDB_REPO", "kgap")                               # default kgap
+project_name: str = os.getenv("COMPOSE_PROJECT_NAME", "kgap")  # default kgap
+gdb_repo: str = os.getenv("GDB_REPO", "kgap")  # default kgap
 default_sparql_endpoint: str = os.getenv(
     "DEFAULT_SPARQL_ENDPOINT", f"http://graphdb:7200/repositories/{gdb_repo}/statements"
-)                                                                           # default endpoint for updates
-network_name: str = os.getenv("DOCKER_NETWORK", f"{project_name}_default")  # default network name derived from compose project name
-remove_containers: bool = os.getenv("LDES_REMOVE_CONTAINERS", "1") == "1"   # default to true
-monitor_interval: int = int(os.getenv("LDES_MONITOR_INTERVAL", "300"))      # in seconds, default 5 minutes
+)  # default endpoint for updates
+network_name: str = os.getenv(
+    "DOCKER_NETWORK", f"{project_name}_default"
+)  # default network name derived from compose project name
+remove_containers: bool = (
+    os.getenv("LDES_REMOVE_CONTAINERS", "1") == "1"
+)  # default to true
+monitor_interval: int = int(
+    os.getenv("LDES_MONITOR_INTERVAL", "300")
+)  # in seconds, default 5 minutes
 
-host_pwd: str = os.getenv("HOST_PWD", "/tmp")   # passed working dir from host env - fallback to /tmp
+host_pwd: str = os.getenv(
+    "HOST_PWD", "/tmp"
+)  # passed working dir from host env - fallback to /tmp
 
 # path conversion setup between guest and host
-guest_data_root: Path = Path("/data")           # main mounted /data inside docker guest
+guest_data_root: Path = Path("/data")  # main mounted /data inside docker guest
 host_data_path: Path = Path(host_pwd) / "data"  # assumed corresponding host data path
 
 
@@ -48,10 +56,14 @@ def guest2host_data_path(path: Path) -> Path:
 
 
 # paths in use
-ldes_consumer_root: Path = guest_data_root / "ldes-consumer"  # main ldes-consumer data path in guest
-logs_path: Path = ldes_consumer_root / "logs"                 # subfolder for logs in guest
-state_path: Path = ldes_consumer_root / "state"               # subfolder for state in guest
-host_state_path: Path = guest2host_data_path(state_path)      # corresponding host path for state (for volume mount)
+ldes_consumer_root: Path = (
+    guest_data_root / "ldes-consumer"
+)  # main ldes-consumer data path in guest
+logs_path: Path = ldes_consumer_root / "logs"  # subfolder for logs in guest
+state_path: Path = ldes_consumer_root / "state"  # subfolder for state in guest
+host_state_path: Path = guest2host_data_path(
+    state_path
+)  # corresponding host path for state (for volume mount)
 
 # Global list to track feeds in use
 feeds: dict[str, dict] = None
@@ -65,21 +77,18 @@ def docker_container_name(feedname: str) -> str:
 
 @contextmanager
 def check_docker_container_running(
-    feedname: str,
-    feed: dict
+    feedname: str, feed: dict
 ) -> Generator[bool, None, None]:
     """Check if a Docker container for a given feed is running."""
     container_name = docker_container_name(feedname)
     cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         is_running = result.returncode == 0 and result.stdout.strip() == "true"
         yield is_running
     except subprocess.TimeoutExpired:
         log.error(f"Timeout checking container status for '{container_name}'")
-        return None
+        yield False
 
 
 def _check_docker_container_exists(feedname: str, feed: dict) -> bool:
@@ -87,9 +96,7 @@ def _check_docker_container_exists(feedname: str, feed: dict) -> bool:
     container_name = docker_container_name(feedname)
     cmd = ["docker", "inspect", container_name]
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         return result.returncode == 0
     except subprocess.TimeoutExpired:
         log.error(f"Timeout checking container existence for '{container_name}'")
@@ -104,8 +111,12 @@ def docker_container_remove(feedname: str, feed: dict) -> None:
         return
     # else
     if not remove_containers:
-        log.info(f"Skipping removal of existing container for feed '{feedname}' as per configuration.")
-        log.info("This may lead to (1) not launching now if it is already running, or (2) reusing an old stopped container.")
+        log.info(
+            f"Skipping removal of existing container for feed '{feedname}' as per configuration."
+        )
+        log.info(
+            "This may lead to (1) not launching now if it is already running, or (2) reusing an old stopped container."
+        )
         return
     # else - proceed to remove
     log.info(f"Removing existing container for feed '{feedname}'")
@@ -119,7 +130,9 @@ def docker_container_remove(feedname: str, feed: dict) -> None:
         log.exception(e, exc_info=True)
 
 
-def docker_container_start(feedname: str, feed: dict, image_name: str, project_name: str, network_name: str) -> None:
+def docker_container_start(
+    feedname: str, feed: dict, image_name: str, project_name: str, network_name: str
+) -> None:
     """Start a Docker container for a given feed."""
     # 1| get relevant parts from feed config
     feed_url = feed.get("url")
@@ -162,7 +175,14 @@ def docker_container_start(feedname: str, feed: dict, image_name: str, project_n
     extra_env = feed.get("environment", {})
     if isinstance(extra_env, dict):
         for key, value in extra_env.items():
-            if key in {"LDES", "SPARQL_ENDPOINT", "TARGET_GRAPH", "FAILURE_IS_FATAL", "FOLLOW", "POLLING_FREQUENCY"}:
+            if key in {
+                "LDES",
+                "SPARQL_ENDPOINT",
+                "TARGET_GRAPH",
+                "FAILURE_IS_FATAL",
+                "FOLLOW",
+                "POLLING_FREQUENCY",
+            }:
                 log.warning(
                     f"Environment variable '{key}' for feed '{feedname}' is reserved and cannot be overridden; ignoring..."
                 )
@@ -191,7 +211,9 @@ def docker_container_start(feedname: str, feed: dict, image_name: str, project_n
     state_path_for_feed.mkdir(parents=True, exist_ok=True)
     json_state_file = state_path_for_feed / "ldes-client_state.json"
     if json_state_file.exists():
-        log.info(f"Note that existing state file exists for feed '{feedname}' it will be reused.")
+        log.info(
+            f"Note that existing state file exists for feed '{feedname}' it will be reused."
+        )
 
     log.info(f"Starting LDES consumer for feed: {feedname}")
     log.info(f"  URL: {feed_url}")
@@ -253,9 +275,13 @@ def docker_container_capture_logs(feedname: str, feed: dict) -> None:
     stderr_log = logs_path / f"{feedname}_{ts}_stderr.log"
 
     with open(stdout_log, "w") as stdout_file, open(stderr_log, "w") as stderr_file:
-        capture_logs = subprocess.run(cmd, stdout=stdout_file, stderr=stderr_file, timeout=5)
+        capture_logs = subprocess.run(
+            cmd, stdout=stdout_file, stderr=stderr_file, timeout=5
+        )
         if capture_logs.returncode == 0:
-            log.error(f"Container logs can be found in {logs_path}/{feedname}_{ts}*.log")
+            log.error(
+                f"Container logs can be found in {logs_path}/{feedname}_{ts}*.log"
+            )
 
 
 # === Signal handling for graceful shutdown ===
@@ -264,22 +290,28 @@ def signal_handler(signum, frame):
     global feeds
     log.info(f"Received signal {signum}, checking {len(feeds)} LDES consumers...")
     active_feeds: dict[str, dict] = get_active_feeds()
-    log.info(f"Processing signal {signum}, shutting down {len(active_feeds)} active LDES consumers...")
+    log.info(
+        f"Processing signal {signum}, shutting down {len(active_feeds)} active LDES consumers..."
+    )
     for feedname, feed in active_feeds.items():
         with check_docker_container_running(feedname, feed) as is_running:
             if not is_running:
-                log.info(f"active LDES consumer for feed '{feedname}' not running, so not stopping")
+                log.info(
+                    f"active LDES consumer for feed '{feedname}' not running, so not stopping"
+                )
             else:
                 log.info(f"Stopping active LDES consumer for feed '{feedname}'...")
                 docker_container_stop(feedname, feed)
         docker_container_remove(feedname, feed)
-    log.info(f"Done handling signal {signum}, all feed instances should have stopped...")
+    log.info(
+        f"Done handling signal {signum}, all feed instances should have stopped..."
+    )
     sys.stdout.flush()
     sys.exit(0)
 
 
 # === Configuration loading and feed spawning logic ===
-def load_config(feed_config_path: Path) -> dict[str, any]:
+def load_config(feed_config_path: Path) -> dict[str, Any]:
     """Load and parse the YAML configuration file."""
     try:
         with open(feed_config_path, "r") as feed_config_file:
@@ -317,7 +349,7 @@ def get_active_feeds() -> dict[str, dict]:
 
 def spawn_feed_instance(
     feedname: str,
-    feed: dict[str, any],
+    feed: dict[str, Any],
     image_name: str,
     project_name: str,
     network_name: str,
@@ -342,7 +374,11 @@ def spawn_feed_instance(
 
     with check_docker_container_running(feedname, feed) as is_running:
         if is_running:
-            fail_feed(feedname, feed, "Container is already running. Stop it or give a different name.")
+            fail_feed(
+                feedname,
+                feed,
+                "Container is already running. Stop it or give a different name.",
+            )
             return
 
     docker_container_remove(feedname, feed)
@@ -393,7 +429,9 @@ def main():
         log.error(f"No LDES consumers (out of {len(feeds)}) were started successfully")
         sys.exit(1)
 
-    log.info(f"Successfully started {len(active_feeds)} of {len(feeds)} LDES consumer(s)")
+    log.info(
+        f"Successfully started {len(active_feeds)} of {len(feeds)} LDES consumer(s)"
+    )
     log.info("Starting to monitor started processes... (Press Ctrl+C to stop)")
 
     # Monitor processes and restart if they have ended
@@ -409,7 +447,9 @@ def main():
                     log.info(f"LDES consumer for feed '{feedname}' is still running")
                     continue  # still running
                 # else - container has stopped - attempt restart
-                log.warning(f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart")
+                log.warning(
+                    f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
+                )
                 docker_container_capture_logs(feedname, feed)
                 docker_container_start(
                     feedname,
