@@ -1,10 +1,14 @@
 # docker compose env variables
 COMPOSE_PROJECT_NAME=kgap
+# BUILD_TAG=latest
+# LOG_LEVEL defaults to INFO
+LOG_LEVEL=DEBUG
 
-#graphdb env variables
+# graphdb env variables
 GDB_REPO=kgap
-REPOLABEL=label_repo_here
-GDB_HOME_FOLDER=/opt/graphdb/home
+REPOLABEL=K-GAP Test Repository
+# GDB_HOME_FOLDER defaults to /opt/graphdb/home, keeping data in the container
+# GDB_HOME_FOLDER=/data/graphdb  # uncomment to persist graphdb data in ./data/graphdb
 GDB_MAX_HEADER=65536
 GDB_JAVA_OPTS="-Xms8g -Xmx16g -Dcom.ontotext.graphdb.monitoring.jmx=true"
 
@@ -26,4 +30,10 @@ SCHEDULER_INTERVAL_SECONDS=86400
 # ldes-consumer env variables
 LDES_CONFIG_FILE=/data/ldes-feeds.yaml
 LDES2SPARQL_IMAGE=ghcr.io/rdf-connect/ldes2sparql:latest
-LOG_LEVEL=INFO
+# LDES_CONSUMER_PREFIX=ldes-consumer
+# LDES_LOG_LEVEL defaults to whatever LOG_LEVEL is set to
+LDES_LOG_LEVEL=DEBUG
+# LDES_CLEAR_STATE defaults to 0; set to 1 to clear state on startup
+# LDES_CLEAR_STATE=0
+# LDES_REMOVE_CONTAINERS defaults to 1; set to 0 to reuse existing containers
+# LDES_REMOVE_CONTAINERS=1

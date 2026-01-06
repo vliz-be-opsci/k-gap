@@ -1,4 +1,4 @@
-from pykg2tbl import DefaultSparqlBuilder, KGSource, QueryResult
+from sema.query import DefaultSparqlBuilder, GraphSource, QueryResult
 from pathlib import Path
 from pandas import DataFrame
 import os
@@ -7,7 +7,7 @@ import os
 GDB_BASE: str = os.getenv("GDB_BASE", "http://localhost:7200/")
 GDB_REPO: str = os.getenv("GDB_REPO", "kgap")
 GDB_ENDPOINT: str = f"{GDB_BASE}repositories/{GDB_REPO}"
-GDB: KGSource = KGSource.build(GDB_ENDPOINT)
+GDB: GraphSource = GraphSource.build(GDB_ENDPOINT)
 
 
 TEMPLATES_FOLDER = str(Path().absolute() / "queries")
@@ -19,7 +19,7 @@ def generate_sparql(name: str, **vars) -> str:
     return GENERATOR.build_syntax(name, **vars)
 
 
-def _execute_to_df(src: KGSource, name: str, **vars) -> DataFrame:
+def _execute_to_df(src: GraphSource, name: str, **vars) -> DataFrame:
     """Builds the sparql and executes, returning the result as a dataframe."""
     sparql = generate_sparql(name, **vars)
     result: QueryResult = src.query(sparql=sparql)
@@ -32,7 +32,7 @@ def execute_to_df(name: str, **vars) -> DataFrame:
 
 
 class ExternalEndPoint:
-    def __init__(self, src: KGSource):
+    def __init__(self, src: GraphSource):
         self.src = src
     
     def execute_to_df(self, name: str, **vars) -> DataFrame:

@@ -9,71 +9,144 @@ import yaml
 import subprocess
 import signal
 import time
-from typing import List, Dict, Any
+from pathlib import Path
+from contextlib import contextmanager
+from typing import Generator, Any
+from logger import setup_logger, Logger
 
-from logger import setup_logger
-
+# === Global config / data and logger setup ===
 # Set up logger
-logger = setup_logger("ldes-consumer", os.getenv("LOG_LEVEL", "INFO"))
+loglevel: str = os.getenv("LOG_LEVEL", "INFO")
+pfx: str = os.getenv("LDES_CONSUMER_PREFIX", "ldes-consumer")
+log: Logger = setup_logger(pfx, loglevel)
 
-# Global list to track spawned processes
-spawned_processes: List[subprocess.Popen] = []
+# Get configuration options
+# note that js based ldes2sparql expects lowercase log levels
+ldes_loglevel = os.getenv("LDES_LOG_LEVEL", loglevel).lower()
+image_name: str = os.getenv(
+    "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"  # default image
+)
+project_name: str = os.getenv("COMPOSE_PROJECT_NAME", "kgap")  # default kgap
+gdb_repo: str = os.getenv("GDB_REPO", "kgap")  # default kgap
+default_sparql_endpoint: str = os.getenv(
+    "DEFAULT_SPARQL_ENDPOINT", f"http://graphdb:7200/repositories/{gdb_repo}/statements"
+)  # default endpoint for updates
+network_name: str = os.getenv(
+    "DOCKER_NETWORK", f"{project_name}_default"
+)  # default network name derived from compose project name
+remove_containers: bool = (
+    os.getenv("LDES_REMOVE_CONTAINERS", "1") == "1"
+)  # default to true
+monitor_interval: int = int(
+    os.getenv("LDES_MONITOR_INTERVAL", "300")
+)  # in seconds, default 5 minutes
+
+host_pwd: str = os.getenv(
+    "HOST_PWD", "/tmp"
+)  # passed working dir from host env - fallback to /tmp
+
+# path conversion setup between guest and host
+guest_data_root: Path = Path("/data")  # main mounted /data inside docker guest
+host_data_path: Path = Path(host_pwd) / "data"  # assumed corresponding host data path
 
 
-def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully."""
-    logger.info(f"Received signal {signum}, shutting down LDES consumers...")
-    for proc in spawned_processes:
-        try:
-            proc.terminate()
-        except Exception as e:
-            logger.error(f"Error terminating process: {e}")
-    sys.exit(0)
+def guest2host_data_path(path: Path) -> Path:
+    """Convert a guest data path to the corresponding host data path."""
+    return host_data_path / path.relative_to(guest_data_root)
 
 
-def load_config(config_file: str) -> Dict[str, Any]:
-    """Load and parse the YAML configuration file."""
+# paths in use
+ldes_consumer_root: Path = (
+    guest_data_root / "ldes-consumer"
+)  # main ldes-consumer data path in guest
+logs_path: Path = ldes_consumer_root / "logs"  # subfolder for logs in guest
+state_path: Path = ldes_consumer_root / "state"  # subfolder for state in guest
+host_state_path: Path = guest2host_data_path(
+    state_path
+)  # corresponding host path for state (for volume mount)
+
+# Global list to track feeds in use
+feeds: dict[str, dict] = None
+
+
+# === Docker container management functions ===
+def docker_container_name(feedname: str) -> str:
+    """Generate the Docker container name for a given feed."""
+    return f"{pfx}-{feedname}"
+
+
+@contextmanager
+def check_docker_container_running(
+    feedname: str, feed: dict
+) -> Generator[bool, None, None]:
+    """Check if a Docker container for a given feed is running."""
+    container_name = docker_container_name(feedname)
+    cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
     try:
-        with open(config_file, "r") as f:
-            config = yaml.safe_load(f)
-        return config
-    except Exception as e:
-        logger.error(f"Failed to load config file {config_file}: {e}")
-        sys.exit(1)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        is_running = result.returncode == 0 and result.stdout.strip() == "true"
+        yield is_running
+    except subprocess.TimeoutExpired:
+        log.error(f"Timeout checking container status for '{container_name}'")
+        yield False
 
 
-def spawn_ldes2sparql_instance(
-    feed: Dict[str, Any], network_name: str, image: str, project_name: str
-) -> subprocess.Popen:
-    """
-    Spawn a single ldes2sparql Docker container instance.
+def _check_docker_container_exists(feedname: str, feed: dict) -> bool:
+    """Check if a Docker container for a given feed exists."""
+    container_name = docker_container_name(feedname)
+    cmd = ["docker", "inspect", container_name]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        log.error(f"Timeout checking container existence for '{container_name}'")
+        return False
 
-    Args:
-        feed: Dictionary containing feed configuration
-        network_name: Docker network to attach to
-        image: Docker image to use for ldes2sparql
-        project_name: Docker Compose project name for container labeling
 
-    Returns:
-        Subprocess object for the spawned container
-    """
-    feed_name = feed.get("name", "unnamed")
-    feed_url = feed.get("url")
-    sparql_endpoint = feed.get("sparql_endpoint")
-
-    if not feed_url or not sparql_endpoint:
-        logger.error(
-            f"Feed '{feed_name}' is missing required 'url' or 'sparql_endpoint'"
+def docker_container_remove(feedname: str, feed: dict) -> None:
+    """Remove a Docker container for a given feed if it exists.
+    But only if it exists and the wrapper is configured to do so."""
+    if not _check_docker_container_exists(feedname, feed):
+        log.info(f"No existing container to remove for feed '{feedname}'")
+        return
+    # else
+    if not remove_containers:
+        log.info(
+            f"Skipping removal of existing container for feed '{feedname}' as per configuration."
         )
-        return None
+        log.info(
+            "This may lead to (1) not launching now if it is already running, or (2) reusing an old stopped container."
+        )
+        return
+    # else - proceed to remove
+    log.info(f"Removing existing container for feed '{feedname}'")
+    container_name = docker_container_name(feedname)
+    cmd: list[str] = ["docker", "container", "remove", "-f", container_name]
+    try:
+        subprocess.run(cmd, timeout=10)
+        log.info(f"Removed container '{container_name}' successfully.")
+    except Exception as e:
+        log.error(f"Error removing container '{container_name}'")
+        log.exception(e, exc_info=True)
 
-    container_name = f"ldes-consumer-{feed_name}"
 
-    # Build docker run command
-    cmd = [
+def docker_container_start(
+    feedname: str, feed: dict, image_name: str, project_name: str, network_name: str
+) -> None:
+    """Start a Docker container for a given feed."""
+    # 1| get relevant parts from feed config
+    feed_url = feed.get("url")
+    sparql_endpoint = feed.get("sparql_endpoint", default_sparql_endpoint)
+    target_graph = feed.get("target_graph", f"urn:kgap:{pfx}:{feedname}")
+    container_name = docker_container_name(feedname)
+    # Note: The config uses 'polling_interval' (seconds) for user-friendliness,
+    # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
+    polling_frequency = feed.get("polling_interval", 60) * 1000
+
+    # 2| Compose build the docker run command
+    cmd: list[str] = [
         "docker",
         "run",
-        # "--rm", # Uncomment to auto-remove container on exit
         "--name",
         container_name,
         "--network",
@@ -84,86 +157,246 @@ def spawn_ldes2sparql_instance(
         "--label",
         "com.docker.compose.service=ldes-consumer",
         "-v",
-        f"/data/ldes-state-{feed_name}:/state",
+        f"{host_data_path}:/data",
+        "-v",
+        f"{host_state_path}/{feedname}:/state",
     ]
 
     # Add environment variables
     cmd.extend(["-e", f"LDES={feed_url}"])
     cmd.extend(["-e", f"SPARQL_ENDPOINT={sparql_endpoint}"])
-    cmd.extend(["-e", "SHAPE="])
-    cmd.extend(["-e", "TARGET_GRAPH="])
+    cmd.extend(["-e", f"TARGET_GRAPH={target_graph}"])
+    cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
     cmd.extend(["-e", "FAILURE_IS_FATAL=false"])
     cmd.extend(["-e", "FOLLOW=true"])
-    cmd.extend(["-e", "MATERIALIZE=false"])
-
-    # Note: The config uses 'polling_interval' (seconds) for user-friendliness,
-    # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
-    polling_frequency = feed.get("polling_interval", 60) * 1000
-    # cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
-
-    # log cmd
-    logger.debug(f"Docker command for feed '{feed_name}': {' '.join(cmd)}")
 
     # Add any additional environment variables from the feed config
-    extra_env = feed.get("environment") or {}
+    added_envs: set[str] = set()
+    extra_env = feed.get("environment", {})
     if isinstance(extra_env, dict):
         for key, value in extra_env.items():
+            if key in {
+                "LDES",
+                "SPARQL_ENDPOINT",
+                "TARGET_GRAPH",
+                "FAILURE_IS_FATAL",
+                "FOLLOW",
+                "POLLING_FREQUENCY",
+            }:
+                log.warning(
+                    f"Environment variable '{key}' for feed '{feedname}' is reserved and cannot be overridden; ignoring..."
+                )
+                continue
             cmd.extend(["-e", f"{key}={value}"])
-    elif extra_env is not None:
-        logger.warning(
-            f"'environment' for feed '{feed_name}' is not a mapping; skipping"
+            added_envs.add(key)
+    else:
+        log.warning(
+            f"'environment' for feed '{feedname}' is not a mapping; ignoring..."
         )
+    # Ensure SHAPE is set, even if empty
+    if "SHAPE" not in added_envs:
+        cmd.extend(["-e", "SHAPE="])
+    # Ensure MATERIALIZE is set, even if empty
+    if "MATERIALIZE" not in added_envs:
+        cmd.extend(["-e", "MATERIALIZE=true"])
+    # Ensure LOG_LEVEL is set correctly
+    if "LOG_LEVEL" not in added_envs:
+        cmd.extend(["-e", f"LOG_LEVEL={ldes_loglevel}"])
 
     # Add the image name
-    cmd.append(image)
+    cmd.append(image_name)
 
-    logger.info(f"Starting LDES consumer for feed: {feed_name}")
-    logger.info(f"  URL: {feed_url}")
-    logger.info(f"  SPARQL Endpoint: {sparql_endpoint}")
-    logger.debug(f"  Command: {' '.join(cmd)}")
+    # 3| Prepare state directory
+    state_path_for_feed = state_path / feedname
+    state_path_for_feed.mkdir(parents=True, exist_ok=True)
+    json_state_file = state_path_for_feed / "ldes-client_state.json"
+    if json_state_file.exists():
+        log.info(
+            f"Note that existing state file exists for feed '{feedname}' it will be reused."
+        )
 
+    log.info(f"Starting LDES consumer for feed: {feedname}")
+    log.info(f"  URL: {feed_url}")
+    log.info(f"  SPARQL Endpoint: {sparql_endpoint}")
+    log.info(f"  Target Graph: {target_graph}")
+    log.info(f"  Polling Frequency (ms): {polling_frequency}")
+    log.info(f"  State path: {host_state_path}/{feedname}")
+    log.debug(f"Starting LDES feed instance with command:\n{' '.join(cmd)}")
+
+    # 4| Run the docker container
     try:
-        proc = subprocess.Popen(
+        proc: subprocess.Popen = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         # Give the container a moment to start
         time.sleep(2)
 
         # Check if the container is actually running
-        check_cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
-        try:
-            result = subprocess.run(
-                check_cmd, capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout.strip() == "true":
-                # Container is running successfully
-                return proc
-            else:
-                # Container failed to start or is not running
-                logger.error(f"Container '{container_name}' failed to start properly")
-                # Try to get logs
-                logs_cmd = ["docker", "logs", container_name]
-                logs_result = subprocess.run(logs_cmd, capture_output=True, text=True)
-                if logs_result.stdout or logs_result.stderr:
-                    logger.error(
-                        f"Container logs:\n{logs_result.stdout}\n{logs_result.stderr}"
-                    )
-                return None
-        except subprocess.TimeoutExpired:
-            logger.error(f"Timeout checking container status for '{container_name}'")
-            return None
+        with check_docker_container_running(feedname, feed) as is_running:
+            if is_running:
+                active_feed(feedname, feed, proc)
+                return
+            # else
+            log.error(f"Container '{feedname}' failed to start properly.")
+            docker_container_capture_logs(feedname, feed)
+            docker_container_remove(feedname, feed)
+            fail_feed(feedname, feed, "Container failed to start.")
+            return
+
     except Exception as e:
-        logger.error(f"Failed to spawn container for feed '{feed_name}': {e}")
-        return None
+        log.error(f"Failed to spawn container for feed '{feedname}'")
+        log.exception(e, exc_info=True)
+        fail_feed(feedname, feed, "Exception during container start.")
+    return
 
 
-def main():
-    """Main function to spawn all ldes2sparql instances."""
-    if len(sys.argv) < 2:
-        logger.error("Usage: spawn_instances.py <config_file>")
+def docker_container_stop(feedname: str, feed: dict) -> bool:
+    """Stop a Docker container for a given feed."""
+    container_name = docker_container_name(feedname)
+    cmd: list[str] = ["docker", "stop", container_name]
+    try:
+        subprocess.run(cmd, timeout=60)
+        log.info(f"Terminated process for feed '{feedname}'")
+    except subprocess.TimeoutExpired:
+        log.error(f"Timeout while trying to stop docker for feed '{feedname}'")
+    except Exception as e:
+        log.error(f"Error terminating process for feed '{feedname}'")
+        log.exception(e, exc_info=True)
+
+
+def docker_container_capture_logs(feedname: str, feed: dict) -> None:
+    """Capture logs from a Docker container for a given feed."""
+    container_name = docker_container_name(feedname)
+    # Try to get logs
+    cmd: list[str] = ["docker", "logs", container_name]
+    # allocate filenames to capture stdout and stderr
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    stdout_log = logs_path / f"{feedname}_{ts}_stdout.log"
+    stderr_log = logs_path / f"{feedname}_{ts}_stderr.log"
+
+    with open(stdout_log, "w") as stdout_file, open(stderr_log, "w") as stderr_file:
+        capture_logs = subprocess.run(
+            cmd, stdout=stdout_file, stderr=stderr_file, timeout=5
+        )
+        if capture_logs.returncode == 0:
+            log.error(
+                f"Container logs can be found in {logs_path}/{feedname}_{ts}*.log"
+            )
+
+
+# === Signal handling for graceful shutdown ===
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully to stop all spawned docker images for individual feeds."""
+    global feeds
+    log.info(f"Received signal {signum}, checking {len(feeds)} LDES consumers...")
+    active_feeds: dict[str, dict] = get_active_feeds()
+    log.info(
+        f"Processing signal {signum}, shutting down {len(active_feeds)} active LDES consumers..."
+    )
+    for feedname, feed in active_feeds.items():
+        with check_docker_container_running(feedname, feed) as is_running:
+            if not is_running:
+                log.info(
+                    f"active LDES consumer for feed '{feedname}' not running, so not stopping"
+                )
+            else:
+                log.info(f"Stopping active LDES consumer for feed '{feedname}'...")
+                docker_container_stop(feedname, feed)
+        docker_container_remove(feedname, feed)
+    log.info(
+        f"Done handling signal {signum}, all feed instances should have stopped..."
+    )
+    sys.stdout.flush()
+    sys.exit(0)
+
+
+# === Configuration loading and feed spawning logic ===
+def load_config(feed_config_path: Path) -> dict[str, Any]:
+    """Load and parse the YAML configuration file."""
+    try:
+        with open(feed_config_path, "r") as feed_config_file:
+            feed_config = yaml.safe_load(feed_config_file)
+        return feed_config
+    except Exception as e:
+        log.error(f"Failed to load config file {feed_config_path}")
+        log.exception(e, exc_info=True)
+        log.info("Exiting due to configuration load failure.")
         sys.exit(1)
 
-    config_file = sys.argv[1]
+
+def fail_feed(feedname: str, feed: dict, reason: str) -> None:
+    """Helper to log feed failure reasons."""
+    log.error(f"Feed {feedname} setup failed: {reason}")
+    feed["active"] = False
+    feed["failure_reason"] = reason
+    return
+
+
+def active_feed(feedname: str, feed: dict, proc: subprocess.Popen) -> None:
+    """Helper to log feed success."""
+    log.info(f"Feed {feedname} docker instance started successfully.")
+    feed["active"] = True
+    feed["process"] = proc
+    feed.pop("failure_reason", None)  # remove any previous failure reason
+    return
+
+
+def get_active_feeds() -> dict[str, dict]:
+    """Get a dictionary of currently active feeds."""
+    global feeds
+    return {fname: f for fname, f in feeds.items() if f.get("active", True)}
+
+
+def spawn_feed_instance(
+    feedname: str,
+    feed: dict[str, Any],
+    image_name: str,
+    project_name: str,
+    network_name: str,
+) -> None:
+    """
+    Spawn a single ldes2sparql Docker container instance.
+
+    Args:
+        feedname: unique name of the feed
+        feed: dictionary containing feed configuration
+        image_name: ref to docker image to use for ldes2sparql
+        project_name: docker-compose project name for container labeling
+        network_name: docker network to attach to in order to reach triple store (graphdb)
+
+    Returns:
+        Nothing. Logs errors if spawning fails. Adds flag 'active' flag to the feed dict on success.
+    """
+
+    if "url" not in feed:
+        fail_feed(feedname, feed, "Missing URL in feed configuration")
+        return
+
+    with check_docker_container_running(feedname, feed) as is_running:
+        if is_running:
+            fail_feed(
+                feedname,
+                feed,
+                "Container is already running. Stop it or give a different name.",
+            )
+            return
+
+    docker_container_remove(feedname, feed)
+    docker_container_start(feedname, feed, image_name, project_name, network_name)
+    return
+
+
+# === Main execution logic ===
+def main():
+    """Main function to spawn all ldes2sparql instances."""
+    log.info(f"Spawner started with {len(sys.argv)} cli arguments")
+    log.info(f"Logger initialized with level {loglevel}")
+
+    if len(sys.argv) < 2:
+        log.error("Usage: spawn_instances.py <config_file>")
+        sys.exit(1)
+
+    config_file: str = sys.argv[1]
 
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, signal_handler)
@@ -172,65 +405,59 @@ def main():
     # Load configuration
     config = load_config(config_file)
 
-    # Get feeds list
+    # Populate feeds list
+    global feeds
     feeds = config.get("feeds", [])
     if not feeds:
-        logger.error("No feeds defined in configuration file")
+        log.error("No feeds defined in configuration file")
         sys.exit(1)
 
-    # Get configuration options
-    ldes2sparql_image = os.getenv(
-        "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"
-    )
-    network_name = os.getenv("DOCKER_NETWORK", "kgap_default")
-    project_name = os.getenv("COMPOSE_PROJECT_NAME", "kgap")
+    log.info(f"Found {len(feeds)} LDES feed(s) to process")
 
-    logger.info(f"Found {len(feeds)} LDES feed(s) to process")
-
-    # Spawn instances for each feed
-    for feed in feeds:
-        proc = spawn_ldes2sparql_instance(
-            feed, network_name, ldes2sparql_image, project_name
+    for feedname, feed in feeds.items():
+        spawn_feed_instance(
+            feedname,
+            feed,
+            image_name,
+            project_name,
+            network_name,
         )
-        if proc:
-            spawned_processes.append(proc)
 
-    if not spawned_processes:
-        logger.error("No LDES consumers were started successfully")
+    active_feeds: dict[str, dict] = get_active_feeds()
+
+    if not active_feeds:
+        log.error(f"No LDES consumers (out of {len(feeds)}) were started successfully")
         sys.exit(1)
 
-    logger.info(f"Successfully started {len(spawned_processes)} LDES consumer(s)")
-    logger.info("Monitoring processes... (Press Ctrl+C to stop)")
+    log.info(
+        f"Successfully started {len(active_feeds)} of {len(feeds)} LDES consumer(s)"
+    )
+    log.info("Starting to monitor started processes... (Press Ctrl+C to stop)")
 
-    # Monitor processes and restart if they fail
+    # Monitor processes and restart if they have ended
     while True:
-        time.sleep(10)
-        for i, proc in enumerate(spawned_processes):
-            feed = feeds[i]
-            feed_name = feed.get("name", "unnamed")
-            if proc.poll() is not None:
-                # Process has terminated
-                returncode = proc.returncode
-                logger.warning(
-                    f"LDES consumer for feed '{feed_name}' terminated with code {returncode}"
+        time.sleep(monitor_interval)
+        active_feeds: dict[str, dict] = get_active_feeds()
+
+        log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
+        for feedname, feed in active_feeds.items():
+            log.info(f"Checking LDES consumer for feed '{feedname}'...")
+            with check_docker_container_running(feedname, feed) as is_running:
+                if is_running:
+                    log.info(f"LDES consumer for feed '{feedname}' is still running")
+                    continue  # still running
+                # else - container has stopped - attempt restart
+                log.warning(
+                    f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
                 )
-                """
-                # Try to read final output
-                stdout, stderr = proc.communicate()
-                if stdout:
-                    logger.debug(f"STDOUT: {stdout}")
-                if stderr:
-                    logger.debug(f"STDERR: {stderr}")
-                logger.info(f"Attempting to restart consumer for feed '{feed_name}'...")
-                new_proc = spawn_ldes2sparql_instance(
-                    feed, network_name, ldes2sparql_image, project_name
+                docker_container_capture_logs(feedname, feed)
+                docker_container_start(
+                    feedname,
+                    feed,
+                    image_name,
+                    project_name,
+                    network_name,
                 )
-                if new_proc:
-                    spawned_processes[i] = new_proc
-                    logger.info(f"Successfully restarted consumer for feed '{feed_name}'")
-                else:
-                    logger.error(f"Failed to restart consumer for feed '{feed_name}'")
-                """
 
 
 if __name__ == "__main__":

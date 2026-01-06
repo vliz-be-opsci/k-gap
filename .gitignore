@@ -2,8 +2,12 @@
 .env
 
 # Data directories
-/data/*
 !/data/.gitkeep
+!/data/graphdb/import/.gitkeep
+/data/*
+!/data/*-example.*
+/notebooks/*
+!/notebooks/.gitkeep
 
 # Notebook checkpoints
 .ipynb_checkpoints/
