@@ -10,7 +10,6 @@ import yaml
 import subprocess
 import signal
 import time
-import hashlib
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator, Any
@@ -72,9 +71,9 @@ host_state_path: Path = guest2host_data_path(
 # Global list to track feeds in use
 feeds: dict[str, dict] = None
 
-# Global to track config file path and hash
+# Global to track config file path and last modified time
 config_file_path: Path = None
-config_file_hash: str = None
+config_file_mtime: float = None
 
 
 # === Docker container management functions ===
@@ -293,16 +292,12 @@ def docker_container_capture_logs(feedname: str, feed: dict) -> None:
 
 
 # === File monitoring helpers ===
-def compute_file_hash(file_path: Path) -> str:
-    """Compute SHA256 hash of a file."""
-    sha256_hash = hashlib.sha256()
+def get_file_mtime(file_path: Path) -> float:
+    """Get the modification time of a file."""
     try:
-        with open(file_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
+        return os.stat(file_path).st_mtime
     except Exception as e:
-        log.error(f"Error computing hash for {file_path}: {e}")
+        log.error(f"Error getting modification time for {file_path}: {e}")
         return None
 
 
@@ -313,8 +308,6 @@ class ConfigFileEventHandler(FileSystemEventHandler):
         super().__init__()
         self.config_path = config_path
         self.sync_callback = sync_callback
-        self.last_modified = time.time()
-        self.debounce_seconds = 2  # Wait 2 seconds before processing
     
     def on_modified(self, event):
         """Handle file modification events."""
@@ -323,17 +316,7 @@ class ConfigFileEventHandler(FileSystemEventHandler):
         
         # Check if the modified file is our config file
         if Path(event.src_path).resolve() == self.config_path.resolve():
-            # Debounce: ignore rapid successive modifications
-            current_time = time.time()
-            if current_time - self.last_modified < self.debounce_seconds:
-                log.debug(f"Ignoring rapid modification of {event.src_path}")
-                return
-            
-            self.last_modified = current_time
             log.info(f"Config file modification detected: {event.src_path}")
-            
-            # Trigger sync after a short delay to ensure file write is complete
-            time.sleep(1)
             self.sync_callback()
 
 
@@ -453,7 +436,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
     Args:
         new_config_path: Optional path to config file (uses global if None)
     """
-    global feeds, config_file_path, config_file_hash
+    global feeds, config_file_path, config_file_mtime
     
     # Use provided path or global
     cfg_path = new_config_path or config_file_path
@@ -461,15 +444,15 @@ def sync_feeds(new_config_path: Path = None) -> None:
         log.error("No config file path available for sync")
         return
     
-    # Compute new hash
-    new_hash = compute_file_hash(cfg_path)
-    if new_hash is None:
-        log.error("Failed to compute hash for config file, skipping sync")
+    # Get file modification time
+    new_mtime = get_file_mtime(cfg_path)
+    if new_mtime is None:
+        log.error("Failed to get modification time for config file, skipping sync")
         return
     
-    # Check if file actually changed (avoid false positives)
-    if config_file_hash is not None and new_hash == config_file_hash:
-        log.debug("Config file hash unchanged, skipping sync")
+    # Check if file actually changed (modification time is greater than previous)
+    if config_file_mtime is not None and new_mtime <= config_file_mtime:
+        log.debug("Config file modification time unchanged, skipping sync")
         return
     
     log.info("Synchronizing feeds with configuration file...")
@@ -549,7 +532,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
     
     # Update global state
     feeds = new_feeds
-    config_file_hash = new_hash
+    config_file_mtime = new_mtime
     
     # Log summary
     active_count = len(get_active_feeds())
