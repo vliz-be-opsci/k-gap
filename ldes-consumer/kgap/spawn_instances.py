@@ -490,8 +490,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
             return
             
     except Exception as e:
-        log.error(f"Failed to load new configuration, keeping old state: {e}")
-        log.exception(e, exc_info=True)
+        log.error(f"Failed to load new configuration, keeping old state: {e}", exc_info=True)
         return
     
     # Get current active feeds (old state)
@@ -520,6 +519,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
         log.info(f"Container for feed '{feedname}' stopped and removed")
     
     # Process modified feeds (check if config changed)
+    modified_feeds = []
     for feedname in potentially_modified_feeds:
         old_feed = old_feeds[feedname]
         new_feed = new_feeds[feedname]
@@ -530,6 +530,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
         
         if old_config != new_config:
             log.info(f"Feed '{feedname}' configuration changed, restarting container...")
+            modified_feeds.append(feedname)
             
             # Stop and remove old container
             with check_docker_container_running(feedname, old_feed) as is_running:
@@ -563,9 +564,8 @@ def sync_feeds(new_config_path: Path = None) -> None:
         log.info(f"  Added: {', '.join(added_feeds)}")
     if removed_feeds:
         log.info(f"  Removed: {', '.join(removed_feeds)}")
-    modified = [f for f in potentially_modified_feeds if old_feeds[f] != new_feeds[f]]
-    if modified:
-        log.info(f"  Modified: {', '.join(modified)}")
+    if modified_feeds:
+        log.info(f"  Modified: {', '.join(modified_feeds)}")
 
 
 # === Main execution logic ===
