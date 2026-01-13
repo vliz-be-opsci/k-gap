@@ -2,7 +2,7 @@
 """
 LDES Consumer Spawner
 Reads a YAML configuration file and spawns ldes2sparql Docker container instances.
-Supports dynamic feed addition/removal via watchdog file monitoring.
+Supports dynamic feed addition/removal via polling-based file monitoring.
 """
 import os
 import sys
@@ -14,8 +14,6 @@ from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator, Any
 from logger import setup_logger, Logger
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 # === Global config / data and logger setup ===
 # Set up logger
@@ -307,25 +305,6 @@ def get_file_mtime(file_path: Path) -> float:
         return 0.0
 
 
-class ConfigFileEventHandler(FileSystemEventHandler):
-    """Handler for config file modification events."""
-
-    def __init__(self, config_path: Path, sync_callback):
-        super().__init__()
-        self.config_path = config_path
-        self.sync_callback = sync_callback
-
-    def on_modified(self, event):
-        """Handle file modification events."""
-        if event.is_directory:
-            return
-
-        # Check if the modified file is our config file
-        if Path(event.src_path).resolve() == self.config_path.resolve():
-            log.info(f"Config file modification detected: {event.src_path}")
-            self.sync_callback()
-
-
 # === Signal handling for graceful shutdown ===
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully to stop all spawned docker images for individual feeds."""
@@ -605,55 +584,40 @@ def main():
         f"Successfully started {len(active_feeds)} of {len(feeds)} LDES consumer(s)"
     )
 
-    # Set up watchdog observer for config file monitoring
-    log.info(f"Setting up file watcher for {config_file_path}...")
-    event_handler = ConfigFileEventHandler(
-        config_file_path, lambda: sync_feeds(config_file_path)
-    )
-    observer = Observer()
-    observer.schedule(event_handler, str(config_file_path.parent), recursive=False)
-    observer.start()
-    log.info("File watcher started - config changes will be detected automatically")
-
     log.info("Starting to monitor started processes... (Press Ctrl+C to stop)")
 
     # Monitor processes and restart if they have ended
-    # Also check config file for changes (polling as fallback to watchdog)
-    try:
-        while True:
-            time.sleep(monitor_interval)
+    # Also check config file for changes via polling
+    while True:
+        time.sleep(monitor_interval)
 
-            # Check for config file changes via polling (more reliable than watchdog on shared volumes)
-            log.debug("Checking for config file changes via polling...")
-            sync_feeds(config_file_path)
+        # Check for config file changes via polling
+        log.debug("Checking for config file changes via polling...")
+        sync_feeds(config_file_path)
 
-            active_feeds: dict[str, dict] = get_active_feeds()
+        active_feeds: dict[str, dict] = get_active_feeds()
 
-            log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
-            for feedname, feed in active_feeds.items():
-                log.info(f"Checking LDES consumer for feed '{feedname}'...")
-                with check_docker_container_running(feedname, feed) as is_running:
-                    if is_running:
-                        log.info(
-                            f"LDES consumer for feed '{feedname}' is still running"
-                        )
-                        continue  # still running
-                    # else - container has stopped - attempt restart
-                    log.warning(
-                        f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
+        log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
+        for feedname, feed in active_feeds.items():
+            log.info(f"Checking LDES consumer for feed '{feedname}'...")
+            with check_docker_container_running(feedname, feed) as is_running:
+                if is_running:
+                    log.info(
+                        f"LDES consumer for feed '{feedname}' is still running"
                     )
-                    docker_container_capture_logs(feedname, feed)
-                    docker_container_start(
-                        feedname,
-                        feed,
-                        image_name,
-                        project_name,
-                        network_name,
-                    )
-    finally:
-        # Clean up observer
-        observer.stop()
-        observer.join()
+                    continue  # still running
+                # else - container has stopped - attempt restart
+                log.warning(
+                    f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
+                )
+                docker_container_capture_logs(feedname, feed)
+                docker_container_start(
+                    feedname,
+                    feed,
+                    image_name,
+                    project_name,
+                    network_name,
+                )
         log.info("File watcher stopped")
 
 
