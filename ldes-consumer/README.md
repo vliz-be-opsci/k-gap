@@ -72,7 +72,7 @@ feeds:
 3. Each container is named `ldes-consumer-{feed-name}` and attached to the Docker Compose network
 4. Containers are labeled with the Docker Compose project name for integration with the stack
 5. The service monitors the spawned containers and automatically restarts them if they fail
-6. **NEW:** The service watches the configuration file for changes and dynamically:
+6. **NEW:** The service periodically checks the configuration file for changes and dynamically:
    - Spawns new containers when feeds are added
    - Stops and removes containers when feeds are removed
    - Restarts containers when feed configurations are modified
@@ -84,12 +84,12 @@ The LDES consumer service now supports **dynamic addition, removal, and modifica
 
 ### How Dynamic Feed Management Works
 
-The service uses the Python `watchdog` library to monitor the configuration file (`/data/ldes-feeds.yaml`) for changes. When a modification is detected:
+The service uses a polling mechanism to monitor the configuration file (`/data/ldes-feeds.yaml`) for changes. Every monitoring interval (default: 2 minutes), the service:
 
-1. The file's modification time is checked to verify it has actually changed
-2. The new configuration is loaded and validated
-3. The service compares the new feed list with currently running feeds
-4. Appropriate actions are taken:
+1. Checks the file's modification time to detect if it has changed
+2. If changed, loads and validates the new configuration
+3. Compares the new feed list with currently running feeds
+4. Takes appropriate actions:
    - **Added feeds**: New containers are spawned automatically
    - **Removed feeds**: Existing containers are gracefully stopped and removed
    - **Modified feeds**: Containers are restarted with the new configuration
@@ -104,7 +104,7 @@ To add a new feed at runtime:
    vim data/ldes-feeds.yaml
    ```
 
-2. Save the file - the new feed container will be spawned automatically within a few seconds
+2. Save the file - the new feed container will be spawned automatically on the next polling cycle (within the monitoring interval)
 
 3. Check the logs to see the feed being added:
    ```bash
@@ -113,7 +113,6 @@ To add a new feed at runtime:
 
 You should see log messages like:
 ```
-ldes-consumer - INFO - Config file modification detected: /data/ldes-feeds.yaml
 ldes-consumer - INFO - Synchronizing feeds with configuration file...
 ldes-consumer - INFO - New feed 'my-new-feed' detected, spawning container...
 ldes-consumer - INFO - Starting LDES consumer for feed: my-new-feed
@@ -128,12 +127,17 @@ This feature is particularly useful for:
 - **Feed lifecycle management**: Temporarily disable feeds by removing them, then re-enable later
 - **Integration with self-hosted platforms**: Perfect for platforms like [mtt-self-host-platform](https://github.com/marine-term-translations/mtt-self-host-platform) where users can request new data streams
 
+### Configuration
+
+The monitoring interval can be configured using the `LDES_MONITOR_INTERVAL` environment variable (in seconds, default: 120).
+
 ### Technical Details
 
 - File modification time is checked to detect actual changes
+- Polling interval is configurable via environment variable
 - Invalid YAML or configuration errors preserve the current running state
 - The configuration file is the single source of truth - no state is persisted elsewhere
-- Minimal overhead - watchdog is a lightweight library with no additional dependencies
+- No additional dependencies required - uses only standard Python libraries
 
 ## Container Naming
 
