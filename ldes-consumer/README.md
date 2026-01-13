@@ -86,7 +86,7 @@ The LDES consumer service now supports **dynamic addition, removal, and modifica
 
 The service uses the Python `watchdog` library to monitor the configuration file (`/data/ldes-feeds.yaml`) for changes. When a modification is detected:
 
-1. The file content hash is checked to avoid false positives (e.g., from file system events that don't change content)
+1. The file's modification time is checked to verify it has actually changed
 2. The new configuration is loaded and validated
 3. The service compares the new feed list with currently running feeds
 4. Appropriate actions are taken:
@@ -130,7 +130,7 @@ This feature is particularly useful for:
 
 ### Technical Details
 
-- File changes are debounced (2-second delay) to handle rapid successive modifications
+- File modification time is checked to detect actual changes
 - Invalid YAML or configuration errors preserve the current running state
 - The configuration file is the single source of truth - no state is persisted elsewhere
 - Minimal overhead - watchdog is a lightweight library with no additional dependencies
