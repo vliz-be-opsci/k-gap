@@ -293,12 +293,12 @@ def docker_container_capture_logs(feedname: str, feed: dict) -> None:
 
 # === File monitoring helpers ===
 def get_file_mtime(file_path: Path) -> float:
-    """Get the modification time of a file."""
+    """Get the modification time of a file. Returns 0.0 on error."""
     try:
         return os.stat(file_path).st_mtime
     except Exception as e:
         log.error(f"Error getting modification time for {file_path}: {e}")
-        return None
+        return 0.0
 
 
 class ConfigFileEventHandler(FileSystemEventHandler):
@@ -446,7 +446,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
     
     # Get file modification time
     new_mtime = get_file_mtime(cfg_path)
-    if new_mtime is None:
+    if new_mtime == 0.0:
         log.error("Failed to get modification time for config file, skipping sync")
         return
     
