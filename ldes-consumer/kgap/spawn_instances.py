@@ -582,37 +582,48 @@ def main():
 
     # Monitor processes and restart if they have ended
     # Also check config file for changes via polling
-    while True:
-        time.sleep(monitor_interval)
+    try:
+        while True:
+            time.sleep(monitor_interval)
 
-        # Check for config file changes via polling
-        log.debug("Checking for config file changes via polling...")
-        sync_feeds(config_file_path)
+            # Check for config file changes via polling
+            try:
+                log.debug("Checking for config file changes via polling...")
+                sync_feeds(config_file_path)
+            except Exception as e:
+                log.error(f"Error during config file sync: {e}", exc_info=True)
 
-        active_feeds: dict[str, dict] = get_active_feeds()
+            active_feeds: dict[str, dict] = get_active_feeds()
 
-        log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
-        for feedname, feed in active_feeds.items():
-            log.info(f"Checking LDES consumer for feed '{feedname}'...")
-            with check_docker_container_running(feedname, feed) as is_running:
-                if is_running:
-                    log.info(
-                        f"LDES consumer for feed '{feedname}' is still running"
-                    )
-                    continue  # still running
-                # else - container has stopped - attempt restart
-                log.warning(
-                    f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
-                )
-                docker_container_capture_logs(feedname, feed)
-                docker_container_start(
-                    feedname,
-                    feed,
-                    image_name,
-                    project_name,
-                    network_name,
-                )
-        log.info("File watcher stopped")
+            log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
+            for feedname, feed in active_feeds.items():
+                try:
+                    log.info(f"Checking LDES consumer for feed '{feedname}'...")
+                    with check_docker_container_running(feedname, feed) as is_running:
+                        if is_running:
+                            log.info(
+                                f"LDES consumer for feed '{feedname}' is still running"
+                            )
+                            continue  # still running
+                        # else - container has stopped - attempt restart
+                        log.warning(
+                            f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
+                        )
+                        docker_container_capture_logs(feedname, feed)
+                        docker_container_start(
+                            feedname,
+                            feed,
+                            image_name,
+                            project_name,
+                            network_name,
+                        )
+                except Exception as e:
+                    log.error(f"Error monitoring feed '{feedname}': {e}", exc_info=True)
+    except KeyboardInterrupt:
+        log.info("Monitoring interrupted by user")
+    except Exception as e:
+        log.error(f"Fatal error in monitoring loop: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
