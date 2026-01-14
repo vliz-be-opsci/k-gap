@@ -326,8 +326,14 @@ def signal_handler(signum, frame):
 
 
 # === Configuration loading and feed spawning logic ===
-def load_config(feed_config_path: Path) -> dict[str, Any]:
-    """Load and parse the YAML configuration file."""
+def load_config(
+    feed_config_path: Path, exit_on_error: bool = True
+) -> dict[str, Any] | None:
+    """Load and parse the YAML configuration file.
+    Args:
+        feed_config_path: Path to the YAML configuration file
+        exit_on_error: If True, exit on error; if False, return None
+    """
     try:
         with open(feed_config_path, "r") as feed_config_file:
             feed_config = yaml.safe_load(feed_config_file)
@@ -335,8 +341,10 @@ def load_config(feed_config_path: Path) -> dict[str, Any]:
     except Exception as e:
         log.error(f"Failed to load config file {feed_config_path}")
         log.exception(e, exc_info=True)
-        log.info("Exiting due to configuration load failure.")
-        sys.exit(1)
+        if exit_on_error:
+            log.info("Exiting due to configuration load failure.")
+            sys.exit(1)
+        return None
 
 
 def fail_feed(feedname: str, feed: dict, reason: str) -> None:
@@ -437,8 +445,12 @@ def sync_feeds(new_config_path: Path = None) -> None:
     log.info("Synchronizing feeds with configuration file...")
 
     # Load new configuration
+    new_config = load_config(cfg_path, exit_on_error=False)
+    if new_config is None:
+        log.error("Failed to load new configuration, keeping old state")
+        return
+
     try:
-        new_config = load_config(cfg_path)
         new_feeds = new_config.get("feeds", {})
 
         if not isinstance(new_feeds, dict):
