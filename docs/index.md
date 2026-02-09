@@ -128,7 +128,7 @@ Python-based semantic processing engine:
 ### 4. LDES Consumer (`kgap_ldes-consumer`)
 
 Multi-feed LDES harvesting service:
-- Wraps [ldes2sparql](https://github.com/rdf-connect/ldes2sparql)
+- Wraps [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql)
 - Spawns separate containers for each LDES feed
 - Configurable polling intervals
 - Automatic restart on failure
@@ -236,7 +236,7 @@ SCHEDULER_INTERVAL_SECONDS=86400  # 24 hours
 
 # LDES Consumer Configuration
 LDES_CONFIG_FILE=/data/ldes-feeds.yaml
-LDES2SPARQL_IMAGE=ghcr.io/rdf-connect/ldes2sparql:latest
+LDES2SPARQL_IMAGE=ghcr.io/maregraph-eu/ldes2sparql:latest
 LOG_LEVEL=INFO
 ```
 
@@ -397,7 +397,7 @@ For advanced usage patterns and concepts, see:
 ## Related Projects
 
 - [py-sema](https://github.com/vliz-be-opsci/py-sema): Python semantic processing library used by Sembench
-- [ldes2sparql](https://github.com/rdf-connect/ldes2sparql): LDES harvesting tool
+- [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql): LDES harvesting tool
 - [GraphDB](https://graphdb.ontotext.com/): RDF database
 - [Jupyter](https://jupyter.org/): Interactive computing environment
 

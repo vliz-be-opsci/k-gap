@@ -24,7 +24,7 @@ log: Logger = setup_logger(pfx, loglevel)
 # note that js based ldes2sparql expects lowercase log levels
 ldes_loglevel = os.getenv("LDES_LOG_LEVEL", loglevel).lower()
 image_name: str = os.getenv(
-    "LDES2SPARQL_IMAGE", "ghcr.io/rdf-connect/ldes2sparql:latest"  # default image
+    "LDES2SPARQL_IMAGE", "ghcr.io/maregraph-eu/ldes2sparql:latest"  # default image
 )
 project_name: str = os.getenv("COMPOSE_PROJECT_NAME", "kgap")  # default kgap
 gdb_repo: str = os.getenv("GDB_REPO", "kgap")  # default kgap

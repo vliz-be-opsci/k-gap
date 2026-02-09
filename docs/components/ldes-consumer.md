@@ -1,6 +1,6 @@
 # LDES Consumer Component
 
-The LDES Consumer is a multi-feed harvesting service that wraps [ldes2sparql](https://github.com/rdf-connect/ldes2sparql) to automatically ingest data from multiple Linked Data Event Streams (LDES) into GraphDB.
+The LDES Consumer is a multi-feed harvesting service that wraps [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) to automatically ingest data from multiple Linked Data Event Streams (LDES) into GraphDB.
 
 ## Overview
 
@@ -82,7 +82,7 @@ The LDES Consumer service reads a YAML configuration file containing multiple LD
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LDES_CONFIG_FILE` | `/data/ldes-feeds.yaml` | Path to YAML configuration file |
-| `LDES2SPARQL_IMAGE` | `ghcr.io/rdf-connect/ldes2sparql:latest` | Docker image for ldes2sparql |
+| `LDES2SPARQL_IMAGE` | `ghcr.io/maregraph-eu/ldes2sparql:latest` | Docker image for ldes2sparql |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `DOCKER_NETWORK` | `${COMPOSE_PROJECT_NAME}_default` | Docker network for spawned containers |
 | `COMPOSE_PROJECT_NAME` | `kgap` | Docker Compose project name |
@@ -210,7 +210,7 @@ def setup_logger(name: str, level: str = "INFO") -> logging.Logger:
 
 3. **Ensure ldes2sparql image is available**:
    ```bash
-   docker pull ghcr.io/rdf-connect/ldes2sparql:latest
+   docker pull ghcr.io/maregraph-eu/ldes2sparql:latest
    ```
 
 ### Starting the Service
@@ -486,7 +486,7 @@ Use a custom or specific version of ldes2sparql:
 
 ```bash
 # In .env:
-LDES2SPARQL_IMAGE=ghcr.io/rdf-connect/ldes2sparql:v1.2.3
+LDES2SPARQL_IMAGE=ghcr.io/maregraph-eu/ldes2sparql:v1.2.3
 ```
 
 ### Feed-Specific Environment Variables
@@ -508,5 +508,5 @@ feeds:
 - [Main Documentation](../index.md)
 - [LDES Consumer README](../../ldes-consumer/README.md) - Detailed component documentation
 - [GraphDB Component](./graphdb.md) - Target data store
-- [ldes2sparql](https://github.com/rdf-connect/ldes2sparql) - Underlying harvesting tool
+- [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) - Underlying harvesting tool
 - [LDES Specification](https://w3id.org/ldes/specification) - LDES protocol details

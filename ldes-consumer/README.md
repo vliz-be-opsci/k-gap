@@ -1,6 +1,6 @@
 # LDES Consumer Service
 
-This service is a wrapper around the [ldes2sparql](https://github.com/rdf-connect/ldes2sparql) tool that enables harvesting multiple LDES (Linked Data Event Streams) feeds.
+This service is a wrapper around the [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) tool that enables harvesting multiple LDES (Linked Data Event Streams) feeds.
 
 ## Overview
 
@@ -13,7 +13,7 @@ The LDES consumer service reads a YAML configuration file containing a list of L
 The following environment variables can be configured in your `.env` file:
 
 - `LDES_CONFIG_FILE`: Path to the YAML configuration file (default: `/data/ldes-feeds.yaml`)
-- `LDES2SPARQL_IMAGE`: Docker image to use for ldes2sparql (default: `ghcr.io/rdf-connect/ldes2sparql:latest`)
+- `LDES2SPARQL_IMAGE`: Docker image to use for ldes2sparql (default: `ghcr.io/maregraph-eu/ldes2sparql:latest`)
 - `LOG_LEVEL`: Logging level for the LDES consumer service (default: `INFO`). Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
 ### LDES Feeds Configuration File
@@ -49,7 +49,7 @@ feeds:
 
 1. Ensure the ldes2sparql Docker image is available:
    ```bash
-   docker pull ghcr.io/rdf-connect/ldes2sparql:latest
+   docker pull ghcr.io/maregraph-eu/ldes2sparql:latest
    ```
    Or build it locally if needed.
 
