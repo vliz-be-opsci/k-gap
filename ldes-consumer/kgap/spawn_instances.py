@@ -193,6 +193,12 @@ def docker_container_start(
         log.warning(
             f"'environment' for feed '{feedname}' is not a mapping; ignoring..."
         )
+    # Ensure OPERATION_MODE is set, default to 'sync' if not provided
+    if "OPERATION_MODE" not in added_envs:
+        cmd.extend(["-e", "OPERATION_MODE=Sync"])
+    # Ensure MAXIMUM_BATCH_SIZE is set, default to 500 if not provided
+    if "MEMBER_BATCH_SIZE" not in added_envs:
+        cmd.extend(["-e", "MEMBER_BATCH_SIZE=500"])
     # Ensure SHAPE is set, even if empty
     if "SHAPE" not in added_envs:
         cmd.extend(["-e", "SHAPE="])
