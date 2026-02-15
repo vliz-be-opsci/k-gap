@@ -1,0 +1,82 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+# Shape for validating Person entities
+ex:PersonShape
+    a sh:NodeShape ;
+    sh:targetClass foaf:Person ;
+    rdfs:label "Person Shape" ;
+    rdfs:comment "Validates that Person entities have required properties with correct datatypes" ;
+    
+    # A person must have at least one name
+    sh:property [
+        sh:path foaf:name ;
+        sh:name "name" ;
+        sh:description "Person must have at least one name" ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+    ] ;
+    
+    # A person can have at most one email address
+    sh:property [
+        sh:path foaf:mbox ;
+        sh:name "email" ;
+        sh:description "Person can have at most one email address" ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Warning ;
+    ] ;
+    
+    # If an email is provided, it should match a pattern
+    sh:sparql [
+        sh:message "Email IRI should start with mailto:" ;
+        sh:severity sh:Info ;
+        sh:select """
+            PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+            SELECT $this
+            WHERE {
+                $this foaf:mbox ?email .
+                FILTER(!STRSTARTS(STR(?email), "mailto:"))
+            }
+        """ ;
+    ] ;
+    
+    # A person can have multiple knows relationships
+    sh:property [
+        sh:path foaf:knows ;
+        sh:name "knows" ;
+        sh:description "Person knows other persons" ;
+        sh:class foaf:Person ;
+        sh:severity sh:Info ;
+    ] ;
+    
+    # Age, if present, must be a non-negative integer
+    sh:property [
+        sh:path foaf:age ;
+        sh:name "age" ;
+        sh:description "Age must be a non-negative integer" ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 150 ;
+        sh:severity sh:Violation ;
+    ] .
+
+# Shape for validating Agent entities (more general than Person)
+ex:AgentShape
+    a sh:NodeShape ;
+    sh:targetClass foaf:Agent ;
+    rdfs:label "Agent Shape" ;
+    rdfs:comment "Validates that Agent entities have a name" ;
+    
+    sh:property [
+        sh:path foaf:name ;
+        sh:name "agent name" ;
+        sh:description "Agent must have a name" ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+    ] .

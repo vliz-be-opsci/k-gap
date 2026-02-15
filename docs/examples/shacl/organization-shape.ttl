@@ -1,0 +1,68 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix org: <http://www.w3.org/ns/org#> .
+
+# Shape for validating Organization entities
+ex:OrganizationShape
+    a sh:NodeShape ;
+    sh:targetClass foaf:Organization ;
+    rdfs:label "Organization Shape" ;
+    rdfs:comment "Validates that Organization entities have required properties" ;
+    
+    # An organization must have a name
+    sh:property [
+        sh:path foaf:name ;
+        sh:name "organization name" ;
+        sh:description "Organization must have a name" ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+    ] ;
+    
+    # An organization can have a homepage
+    sh:property [
+        sh:path foaf:homepage ;
+        sh:name "homepage" ;
+        sh:description "Organization can have a homepage" ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Info ;
+    ] ;
+    
+    # An organization can have members
+    sh:property [
+        sh:path foaf:member ;
+        sh:name "members" ;
+        sh:description "Organization members must be Agents" ;
+        sh:class foaf:Agent ;
+        sh:severity sh:Warning ;
+    ] .
+
+# Shape for validating Organizational Unit entities
+ex:OrganizationalUnitShape
+    a sh:NodeShape ;
+    sh:targetClass org:OrganizationalUnit ;
+    rdfs:label "Organizational Unit Shape" ;
+    rdfs:comment "Validates organizational units" ;
+    
+    # Must have a name
+    sh:property [
+        sh:path rdfs:label ;
+        sh:name "unit name" ;
+        sh:description "Unit must have a label" ;
+        sh:minCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    
+    # Can be part of a parent organization
+    sh:property [
+        sh:path org:unitOf ;
+        sh:name "parent organization" ;
+        sh:description "Unit can be part of an organization" ;
+        sh:maxCount 1 ;
+        sh:class foaf:Organization ;
+        sh:severity sh:Info ;
+    ] .
