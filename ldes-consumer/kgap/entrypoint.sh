@@ -5,6 +5,7 @@ set -e
 LDES_CONFIG_FILE="${LDES_CONFIG_FILE:-/data/ldes-feeds.yaml}"
 LDES2SPARQL_IMAGE="${LDES2SPARQL_IMAGE:-ghcr.io/maregraph-eu/ldes2sparql:latest}"
 LDES_CONSUMER_PREFIX="${LDES_CONSUMER_PREFIX:-ldes-consumer}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-kgap}"
 
 # Wrapper echo function
 wecho() {
@@ -26,18 +27,21 @@ fi
 wecho "Starting LDES consumer with config: $LDES_CONFIG_FILE"
 wecho "Using ldes2sparql image: $LDES2SPARQL_IMAGE"
 
-# make sure that the ldes2sparql image is available
-docker pull "$LDES2SPARQL_IMAGE"
-
 
 # trap to pass down SIGNALS TERM (143) and INT (130)
 # $1 == signal to send , $2 == exit code to use
 signal_child() {  
     wecho "passing down signal $1 to child $child"
-    kill -$1 "$child" 2>/dev/null
-    wait "$child"
+    kill -$1 "$child" 2>/dev/null || true
+    wait "$child" 2>/dev/null || true
+    
+    # Extra safety: ensure cleanup happens even if child process doesn't handle it
+    wecho "Running cleanup as safety net..."
+    python3 /kgap/cleanup_containers.py "$COMPOSE_PROJECT_NAME" "$LDES_CONSUMER_PREFIX" || true
+    
     exit $2
 }
+
 wecho "initialising signal traps..."
 trap 'signal_child "TERM" 143' SIGTERM
 trap 'signal_child "INT" 130' SIGINT
@@ -64,5 +68,10 @@ wecho "started spawn-instances with pid $child"
 wait "$child" || true
 child_status=$?
 wecho "spawn-instances exited with status $child_status"
+
+# Final cleanup as safety net before exiting
+wecho "Running final cleanup..."
+python3 /kgap/cleanup_containers.py "$COMPOSE_PROJECT_NAME" "$LDES_CONSUMER_PREFIX" || true
+
 exit $child_status
 

@@ -7,12 +7,13 @@ Supports dynamic feed addition/removal via polling-based file monitoring.
 import os
 import sys
 import yaml
-import subprocess
 import signal
 import time
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator, Any
+import docker
+from docker.errors import NotFound, APIError, DockerException
 from logger import setup_logger, Logger
 
 # === Global config / data and logger setup ===
@@ -73,6 +74,22 @@ feeds: dict[str, dict] = None
 config_file_path: Path = None
 config_file_mtime: float = None
 
+# Docker client (lazy initialized)
+docker_client: docker.DockerClient | None = None
+
+
+def get_docker_client() -> docker.DockerClient:
+    """Get a Docker SDK client or raise on failure."""
+    global docker_client
+    if docker_client is None:
+        try:
+            docker_client = docker.from_env()
+        except DockerException as e:
+            log.error("Failed to connect to Docker daemon via SDK")
+            log.exception(e, exc_info=True)
+            raise
+    return docker_client
+
 
 # === Docker container management functions ===
 def docker_container_name(feedname: str) -> str:
@@ -86,35 +103,39 @@ def check_docker_container_running(
 ) -> Generator[bool, None, None]:
     """Check if a Docker container for a given feed is running."""
     container_name = docker_container_name(feedname)
-    cmd = ["docker", "inspect", "-f", "{{.State.Running}}", container_name]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        is_running = result.returncode == 0 and result.stdout.strip() == "true"
-        yield is_running
-    except subprocess.TimeoutExpired:
-        log.error(f"Timeout checking container status for '{container_name}'")
+        client = get_docker_client()
+        container = client.containers.get(container_name)
+        container.reload()
+        yield container.status == "running"
+    except NotFound:
+        yield False
+    except APIError as e:
+        log.error(f"Docker API error checking container status for '{container_name}'")
+        log.exception(e, exc_info=True)
         yield False
 
 
 def _check_docker_container_exists(feedname: str, feed: dict) -> bool:
     """Check if a Docker container for a given feed exists."""
     container_name = docker_container_name(feedname)
-    cmd = ["docker", "inspect", container_name]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        log.error(f"Timeout checking container existence for '{container_name}'")
+        client = get_docker_client()
+        client.containers.get(container_name)
+        return True
+    except NotFound:
+        return False
+    except APIError as e:
+        log.error(
+            f"Docker API error checking container existence for '{container_name}'"
+        )
+        log.exception(e, exc_info=True)
         return False
 
 
 def docker_container_remove(feedname: str, feed: dict) -> None:
     """Remove a Docker container for a given feed if it exists.
     But only if it exists and the wrapper is configured to do so."""
-    if not _check_docker_container_exists(feedname, feed):
-        log.info(f"No existing container to remove for feed '{feedname}'")
-        return
-    # else
     if not remove_containers:
         log.info(
             f"Skipping removal of existing container for feed '{feedname}' as per configuration."
@@ -123,13 +144,15 @@ def docker_container_remove(feedname: str, feed: dict) -> None:
             "This may lead to (1) not launching now if it is already running, or (2) reusing an old stopped container."
         )
         return
-    # else - proceed to remove
-    log.info(f"Removing existing container for feed '{feedname}'")
     container_name = docker_container_name(feedname)
-    cmd: list[str] = ["docker", "container", "remove", "-f", container_name]
     try:
-        subprocess.run(cmd, timeout=10)
+        client = get_docker_client()
+        container = client.containers.get(container_name)
+        log.info(f"Removing existing container for feed '{feedname}'")
+        container.remove(force=True)
         log.info(f"Removed container '{container_name}' successfully.")
+    except NotFound:
+        log.info(f"No existing container to remove for feed '{feedname}'")
     except Exception as e:
         log.error(f"Error removing container '{container_name}'")
         log.exception(e, exc_info=True)
@@ -148,32 +171,20 @@ def docker_container_start(
     # but ldes2sparql expects 'POLLING_FREQUENCY' (milliseconds)
     polling_frequency = feed.get("polling_interval", 60) * 1000
 
-    # 2| Compose build the docker run command
-    cmd: list[str] = [
-        "docker",
-        "run",
-        "--name",
-        container_name,
-        "--network",
-        network_name,
-        # Add labels to link container to the docker-compose project
-        "--label",
-        f"com.docker.compose.project={project_name}",
-        "--label",
-        "com.docker.compose.service=ldes-consumer",
-        "-v",
-        f"{host_data_path}:/data",
-        "-v",
-        f"{host_state_path}/{feedname}:/state",
-    ]
+    # 2| Compose runtime configuration for Docker SDK
+    labels = {
+        "com.docker.compose.project": project_name,
+        "com.docker.compose.service": "ldes-consumer",
+    }
 
-    # Add environment variables
-    cmd.extend(["-e", f"LDES={feed_url}"])
-    cmd.extend(["-e", f"SPARQL_ENDPOINT={sparql_endpoint}"])
-    cmd.extend(["-e", f"TARGET_GRAPH={target_graph}"])
-    cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
-    cmd.extend(["-e", "FAILURE_IS_FATAL=false"])
-    cmd.extend(["-e", "FOLLOW=true"])
+    env_vars: dict[str, str] = {
+        "LDES": feed_url,
+        "SPARQL_ENDPOINT": sparql_endpoint,
+        "TARGET_GRAPH": target_graph,
+        "POLLING_FREQUENCY": str(polling_frequency),
+        "FAILURE_IS_FATAL": "false",
+        "FOLLOW": "true",
+    }
 
     # Add any additional environment variables from the feed config
     added_envs: set[str] = set()
@@ -192,7 +203,7 @@ def docker_container_start(
                     f"Environment variable '{key}' for feed '{feedname}' is reserved and cannot be overridden; ignoring..."
                 )
                 continue
-            cmd.extend(["-e", f"{key}={value}"])
+            env_vars[str(key)] = str(value)
             added_envs.add(key)
     else:
         log.warning(
@@ -200,22 +211,19 @@ def docker_container_start(
         )
     # Ensure OPERATION_MODE is set, default to 'sync' if not provided
     if "OPERATION_MODE" not in added_envs:
-        cmd.extend(["-e", "OPERATION_MODE=Sync"])
+        env_vars["OPERATION_MODE"] = "Sync"
     # Ensure MAXIMUM_BATCH_SIZE is set, default to 500 if not provided
     if "MEMBER_BATCH_SIZE" not in added_envs:
-        cmd.extend(["-e", "MEMBER_BATCH_SIZE=500"])
+        env_vars["MEMBER_BATCH_SIZE"] = "500"
     # Ensure SHAPE is set, even if empty
     if "SHAPE" not in added_envs:
-        cmd.extend(["-e", "SHAPE="])
+        env_vars["SHAPE"] = ""
     # Ensure MATERIALIZE is set, even if empty
     if "MATERIALIZE" not in added_envs:
-        cmd.extend(["-e", "MATERIALIZE=true"])
+        env_vars["MATERIALIZE"] = "true"
     # Ensure LOG_LEVEL is set correctly
     if "LOG_LEVEL" not in added_envs:
-        cmd.extend(["-e", f"LOG_LEVEL={ldes_loglevel}"])
-
-    # Add the image name
-    cmd.append(image_name)
+        env_vars["LOG_LEVEL"] = ldes_loglevel
 
     # 3| Prepare state directory
     state_path_for_feed = state_path / feedname
@@ -232,27 +240,48 @@ def docker_container_start(
     log.info(f"  Target Graph: {target_graph}")
     log.info(f"  Polling Frequency (ms): {polling_frequency}")
     log.info(f"  State path: {host_state_path}/{feedname}")
-    log.debug(f"Starting LDES feed instance with command:\n{' '.join(cmd)}")
+    log.debug("Starting LDES feed instance via Docker SDK")
 
     # 4| Run the docker container
     try:
-        proc: subprocess.Popen = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        client = get_docker_client()
+
+        try:
+            client.images.pull(image_name)
+        except APIError as e:
+            log.error(f"Failed to pull image '{image_name}'")
+            log.exception(e, exc_info=True)
+            fail_feed(feedname, feed, "Failed to pull image")
+            return
+
+        volumes = {
+            str(host_data_path): {"bind": "/data", "mode": "rw"},
+            str(host_state_path / feedname): {"bind": "/state", "mode": "rw"},
+        }
+
+        container = client.containers.run(
+            image_name,
+            name=container_name,
+            network=network_name,
+            labels=labels,
+            environment=env_vars,
+            volumes=volumes,
+            detach=True,
         )
+
         # Give the container a moment to start
         time.sleep(2)
+        container.reload()
 
-        # Check if the container is actually running
-        with check_docker_container_running(feedname, feed) as is_running:
-            if is_running:
-                active_feed(feedname, feed, proc)
-                return
-            # else
-            log.error(f"Container '{feedname}' failed to start properly.")
-            docker_container_capture_logs(feedname, feed)
-            docker_container_remove(feedname, feed)
-            fail_feed(feedname, feed, "Container failed to start.")
+        if container.status == "running":
+            active_feed(feedname, feed, container)
             return
+
+        log.error(f"Container '{feedname}' failed to start properly.")
+        docker_container_capture_logs(feedname, feed)
+        docker_container_remove(feedname, feed)
+        fail_feed(feedname, feed, "Container failed to start.")
+        return
 
     except Exception as e:
         log.error(f"Failed to spawn container for feed '{feedname}'")
@@ -264,12 +293,13 @@ def docker_container_start(
 def docker_container_stop(feedname: str, feed: dict) -> bool:
     """Stop a Docker container for a given feed."""
     container_name = docker_container_name(feedname)
-    cmd: list[str] = ["docker", "stop", container_name]
     try:
-        subprocess.run(cmd, timeout=60)
+        client = get_docker_client()
+        container = client.containers.get(container_name)
+        container.stop(timeout=60)
         log.info(f"Terminated process for feed '{feedname}'")
-    except subprocess.TimeoutExpired:
-        log.error(f"Timeout while trying to stop docker for feed '{feedname}'")
+    except NotFound:
+        log.info(f"No running container found for feed '{feedname}'")
     except Exception as e:
         log.error(f"Error terminating process for feed '{feedname}'")
         log.exception(e, exc_info=True)
@@ -278,21 +308,122 @@ def docker_container_stop(feedname: str, feed: dict) -> bool:
 def docker_container_capture_logs(feedname: str, feed: dict) -> None:
     """Capture logs from a Docker container for a given feed."""
     container_name = docker_container_name(feedname)
-    # Try to get logs
-    cmd: list[str] = ["docker", "logs", container_name]
     # allocate filenames to capture stdout and stderr
     ts = time.strftime("%Y%m%d-%H%M%S")
     stdout_log = logs_path / f"{feedname}_{ts}_stdout.log"
     stderr_log = logs_path / f"{feedname}_{ts}_stderr.log"
 
+    try:
+        client = get_docker_client()
+        container = client.containers.get(container_name)
+    except NotFound:
+        log.info(f"Container '{container_name}' not found for log capture")
+        return
+    except APIError as e:
+        log.error(f"Docker API error capturing logs for '{container_name}'")
+        log.exception(e, exc_info=True)
+        return
+
     with open(stdout_log, "w") as stdout_file, open(stderr_log, "w") as stderr_file:
-        capture_logs = subprocess.run(
-            cmd, stdout=stdout_file, stderr=stderr_file, timeout=5
-        )
-        if capture_logs.returncode == 0:
-            log.error(
-                f"Container logs can be found in {logs_path}/{feedname}_{ts}*.log"
+        try:
+            stdout_data = container.logs(stdout=True, stderr=False)
+            stderr_data = container.logs(stdout=False, stderr=True)
+        except APIError as e:
+            log.error(f"Docker API error reading logs for '{container_name}'")
+            log.exception(e, exc_info=True)
+            return
+
+        if isinstance(stdout_data, (bytes, bytearray)):
+            stdout_file.write(stdout_data.decode(errors="replace"))
+        else:
+            stdout_file.write(str(stdout_data))
+
+        if isinstance(stderr_data, (bytes, bytearray)):
+            stderr_file.write(stderr_data.decode(errors="replace"))
+        else:
+            stderr_file.write(str(stderr_data))
+
+    log.error(f"Container logs can be found in {logs_path}/{feedname}_{ts}*.log")
+
+
+# === Cleanup helpers ===
+def cleanup_orphaned_containers(project_name: str) -> None:
+    """
+    Find and remove all orphaned child containers belonging to the project.
+
+    This ensures that when the ldes-consumer spawner is terminated (e.g., by docker compose down),
+    all child containers spawned for individual feeds are also cleaned up.
+    """
+    try:
+        client = get_docker_client()
+        consumer_prefix = pfx  # e.g., "ldes-consumer"
+
+        # Find all containers with the project label AND the ldes-consumer prefix in name
+        filters = [
+            {"label": f"com.docker.compose.project={project_name}"},
+        ]
+
+        try:
+            # Query all containers with the project label
+            containers = client.containers.list(
+                all=True,
+                filters={"label": f"com.docker.compose.project={project_name}"},
             )
+            log.debug(
+                f"Found {len(containers)} total containers with project label '{project_name}'"
+            )
+        except APIError as e:
+            log.error(f"Docker API error querying containers: {e}")
+            log.exception(e, exc_info=True)
+            return
+
+        # Filter to only those spawned by this LDES consumer (name must start with prefix)
+        # e.g., "ldes-consumer-feed1", "ldes-consumer-feed2", etc.
+        child_containers = [
+            c for c in containers if c.name.startswith(f"{consumer_prefix}-")
+        ]
+
+        if not child_containers:
+            log.info(f"No orphaned child containers found for project '{project_name}'")
+            return
+
+        log.info(
+            f"Found {len(child_containers)} orphaned child container(s) to clean up: {[c.name for c in child_containers]}"
+        )
+
+        for container in child_containers:
+            try:
+                log.info(f"Removing orphaned container '{container.name}'...")
+                # Try to stop first if running
+                try:
+                    container.reload()
+                    if container.status in ("running", "created"):
+                        log.debug(
+                            f"Container '{container.name}' is {container.status}, stopping..."
+                        )
+                        container.stop(timeout=10)
+                except (NotFound, APIError):
+                    pass
+
+                # Remove the container
+                container.remove(force=True)
+                log.info(f"Successfully removed orphaned container '{container.name}'")
+            except NotFound:
+                log.info(f"Container '{container.name}' already removed")
+            except APIError as e:
+                log.error(
+                    f"Docker API error removing container '{container.name}': {e}"
+                )
+                log.exception(e, exc_info=True)
+            except Exception as e:
+                log.error(f"Error removing orphaned container '{container.name}': {e}")
+                log.exception(e, exc_info=True)
+    except DockerException as e:
+        log.error("Failed to cleanup orphaned containers via Docker SDK")
+        log.exception(e, exc_info=True)
+    except Exception as e:
+        log.error(f"Unexpected error during cleanup: {e}")
+        log.exception(e, exc_info=True)
 
 
 # === File monitoring helpers ===
@@ -309,25 +440,65 @@ def get_file_mtime(file_path: Path) -> float:
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully to stop all spawned docker images for individual feeds."""
     global feeds
-    log.info(f"Received signal {signum}, checking {len(feeds)} LDES consumers...")
-    active_feeds: dict[str, dict] = get_active_feeds()
-    log.info(
-        f"Processing signal {signum}, shutting down {len(active_feeds)} active LDES consumers..."
-    )
-    for feedname, feed in active_feeds.items():
-        with check_docker_container_running(feedname, feed) as is_running:
-            if not is_running:
-                log.info(
-                    f"active LDES consumer for feed '{feedname}' not running, so not stopping"
-                )
-            else:
-                log.info(f"Stopping active LDES consumer for feed '{feedname}'...")
-                docker_container_stop(feedname, feed)
-        docker_container_remove(feedname, feed)
-    log.info(
-        f"Done handling signal {signum}, all feed instances should have stopped..."
-    )
-    sys.stdout.flush()
+    try:
+        log.info(f"Received signal {signum}, initiating graceful shutdown...")
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        if feeds:
+            log.info(f"Checking {len(feeds)} LDES feed(s)...")
+            active_feeds: dict[str, dict] = get_active_feeds()
+            log.info(
+                f"Processing signal {signum}, shutting down {len(active_feeds)} active LDES consumer(s)..."
+            )
+
+            for feedname, feed in active_feeds.items():
+                try:
+                    with check_docker_container_running(feedname, feed) as is_running:
+                        if not is_running:
+                            log.info(
+                                f"Active LDES consumer for feed '{feedname}' not running, so not stopping"
+                            )
+                        else:
+                            log.info(
+                                f"Stopping active LDES consumer for feed '{feedname}'..."
+                            )
+                            docker_container_stop(feedname, feed)
+                    docker_container_remove(feedname, feed)
+                except Exception as e:
+                    log.error(f"Error stopping feed '{feedname}': {e}")
+                    log.exception(e, exc_info=True)
+
+            log.info("Done stopping feed instances")
+        else:
+            log.info("No feeds to shutdown")
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Clean up any orphaned child containers
+        log.info(
+            f"Cleaning up orphaned child containers for project '{project_name}'..."
+        )
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        try:
+            cleanup_orphaned_containers(project_name)
+        except Exception as e:
+            log.error(f"Error during orphaned container cleanup: {e}")
+            log.exception(e, exc_info=True)
+
+        log.info("Graceful shutdown complete")
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+    except Exception as e:
+        log.error(f"Error in signal handler: {e}")
+        log.exception(e, exc_info=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+
     sys.exit(0)
 
 
@@ -361,11 +532,13 @@ def fail_feed(feedname: str, feed: dict, reason: str) -> None:
     return
 
 
-def active_feed(feedname: str, feed: dict, proc: subprocess.Popen) -> None:
+def active_feed(
+    feedname: str, feed: dict, container: docker.models.containers.Container
+) -> None:
     """Helper to log feed success."""
     log.info(f"Feed {feedname} docker instance started successfully.")
     feed["active"] = True
-    feed["process"] = proc
+    feed["container_id"] = container.id
     feed.pop("failure_reason", None)  # remove any previous failure reason
     return
 
@@ -506,12 +679,12 @@ def sync_feeds(new_config_path: Path = None) -> None:
         old_config = {
             k: v
             for k, v in old_feed.items()
-            if k not in ["active", "process", "failure_reason"]
+            if k not in ["active", "container_id", "failure_reason"]
         }
         new_config = {
             k: v
             for k, v in new_feed.items()
-            if k not in ["active", "process", "failure_reason"]
+            if k not in ["active", "container_id", "failure_reason"]
         }
 
         if old_config != new_config:
@@ -533,7 +706,7 @@ def sync_feeds(new_config_path: Path = None) -> None:
         else:
             # Configuration unchanged, keep existing state
             new_feed["active"] = old_feed.get("active", False)
-            new_feed["process"] = old_feed.get("process")
+            new_feed["container_id"] = old_feed.get("container_id")
             if "failure_reason" in old_feed:
                 new_feed["failure_reason"] = old_feed["failure_reason"]
 
@@ -580,6 +753,12 @@ def main():
     global config_file_path
     config_file_path = Path(config_file)
 
+    try:
+        get_docker_client()
+    except DockerException:
+        log.error("Unable to initialize Docker SDK client; exiting")
+        sys.exit(1)
+
     # Initial feed synchronization (replaces old startup logic)
     log.info("Performing initial feed synchronization...")
     sync_feeds(config_file_path)
@@ -600,26 +779,33 @@ def main():
 
     # Monitor processes and restart if they have ended
     # Also check config file for changes via polling
+    time_since_sync = 0
+    check_interval = 5  # Check every 5 seconds (much shorter than monitor_interval to allow signal handling)
+
     try:
         while True:
-            time.sleep(monitor_interval)
+            # Use shorter sleeps to allow signal handling to interrupt quickly
+            time.sleep(check_interval)
+            time_since_sync += check_interval
 
-            # Check for config file changes via polling
-            try:
-                log.debug("Checking for config file changes via polling...")
-                sync_feeds(config_file_path)
-            except Exception as e:
-                log.error(f"Error during config file sync: {e}", exc_info=True)
+            # Check for config file changes at longer interval
+            if time_since_sync >= monitor_interval:
+                try:
+                    log.debug("Checking for config file changes via polling...")
+                    sync_feeds(config_file_path)
+                except Exception as e:
+                    log.error(f"Error during config file sync: {e}", exc_info=True)
+                time_since_sync = 0
 
             active_feeds: dict[str, dict] = get_active_feeds()
 
-            log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
+            log.debug(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
             for feedname, feed in active_feeds.items():
                 try:
-                    log.info(f"Checking LDES consumer for feed '{feedname}'...")
+                    log.debug(f"Checking LDES consumer for feed '{feedname}'...")
                     with check_docker_container_running(feedname, feed) as is_running:
                         if is_running:
-                            log.info(
+                            log.debug(
                                 f"LDES consumer for feed '{feedname}' is still running"
                             )
                             continue  # still running
