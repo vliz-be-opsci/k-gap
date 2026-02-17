@@ -2,6 +2,7 @@
 """
 LDES Consumer Spawner
 Reads a YAML configuration file and spawns ldes2sparql Docker container instances.
+Supports dynamic feed addition/removal via polling-based file monitoring.
 """
 import os
 import sys
@@ -38,8 +39,8 @@ remove_containers: bool = (
     os.getenv("LDES_REMOVE_CONTAINERS", "1") == "1"
 )  # default to true
 monitor_interval: int = int(
-    os.getenv("LDES_MONITOR_INTERVAL", "300")
-)  # in seconds, default 5 minutes
+    os.getenv("LDES_MONITOR_INTERVAL", "120")
+)  # in seconds, default 2 minutes
 
 host_pwd: str = os.getenv(
     "HOST_PWD", "/tmp"
@@ -67,6 +68,10 @@ host_state_path: Path = guest2host_data_path(
 
 # Global list to track feeds in use
 feeds: dict[str, dict] = None
+
+# Global to track config file path and last modified time
+config_file_path: Path = None
+config_file_mtime: float = None
 
 
 # === Docker container management functions ===
@@ -291,6 +296,16 @@ def docker_container_capture_logs(feedname: str, feed: dict) -> None:
             )
 
 
+# === File monitoring helpers ===
+def get_file_mtime(file_path: Path) -> float:
+    """Get the modification time of a file. Returns 0.0 on error."""
+    try:
+        return os.stat(file_path).st_mtime
+    except Exception as e:
+        log.error(f"Error getting modification time for {file_path}: {e}")
+        return 0.0
+
+
 # === Signal handling for graceful shutdown ===
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully to stop all spawned docker images for individual feeds."""
@@ -318,8 +333,14 @@ def signal_handler(signum, frame):
 
 
 # === Configuration loading and feed spawning logic ===
-def load_config(feed_config_path: Path) -> dict[str, Any]:
-    """Load and parse the YAML configuration file."""
+def load_config(
+    feed_config_path: Path, exit_on_error: bool = True
+) -> dict[str, Any] | None:
+    """Load and parse the YAML configuration file.
+    Args:
+        feed_config_path: Path to the YAML configuration file
+        exit_on_error: If True, exit on error; if False, return None
+    """
     try:
         with open(feed_config_path, "r") as feed_config_file:
             feed_config = yaml.safe_load(feed_config_file)
@@ -327,8 +348,10 @@ def load_config(feed_config_path: Path) -> dict[str, Any]:
     except Exception as e:
         log.error(f"Failed to load config file {feed_config_path}")
         log.exception(e, exc_info=True)
-        log.info("Exiting due to configuration load failure.")
-        sys.exit(1)
+        if exit_on_error:
+            log.info("Exiting due to configuration load failure.")
+            sys.exit(1)
+        return None
 
 
 def fail_feed(feedname: str, feed: dict, reason: str) -> None:
@@ -393,6 +416,151 @@ def spawn_feed_instance(
     return
 
 
+def sync_feeds(new_config_path: Path = None) -> None:
+    """
+    Synchronize running feed containers with the configuration file.
+
+    This function:
+    - Loads the current config (or reloads if path is provided)
+    - Compares new feeds with currently running feeds
+    - Spawns new containers for added feeds
+    - Stops and removes containers for removed feeds
+    - Restarts containers if their configuration changed
+
+    Args:
+        new_config_path: Optional path to config file (uses global if None)
+    """
+    global feeds, config_file_path, config_file_mtime
+
+    # Use provided path or global
+    cfg_path = new_config_path or config_file_path
+    if cfg_path is None:
+        log.error("No config file path available for sync")
+        return
+
+    # Get file modification time
+    new_mtime = get_file_mtime(cfg_path)
+    if new_mtime == 0.0:
+        log.error("Failed to get modification time for config file, skipping sync")
+        return
+
+    # Check if file actually changed (modification time is greater than previous)
+    if config_file_mtime is not None and new_mtime <= config_file_mtime:
+        log.debug("Config file modification time unchanged, skipping sync")
+        return
+
+    log.info("Synchronizing feeds with configuration file...")
+
+    # Load new configuration
+    new_config = load_config(cfg_path, exit_on_error=False)
+    if new_config is None:
+        log.error("Failed to load new configuration, keeping old state")
+        return
+
+    try:
+        new_feeds = new_config.get("feeds", {})
+
+        if not isinstance(new_feeds, dict):
+            log.error(
+                "Invalid feeds format in config (expected dict), keeping old state"
+            )
+            return
+
+    except Exception as e:
+        log.error(
+            f"Failed to load new configuration, keeping old state: {e}", exc_info=True
+        )
+        return
+
+    # Get current active feeds (old state)
+    old_feeds = feeds if feeds is not None else {}
+
+    # Determine changes
+    old_feed_names = set(old_feeds.keys())
+    new_feed_names = set(new_feeds.keys())
+
+    added_feeds = new_feed_names - old_feed_names
+    removed_feeds = old_feed_names - new_feed_names
+    potentially_modified_feeds = old_feed_names & new_feed_names
+
+    # Process removed feeds
+    for feedname in removed_feeds:
+        log.info(f"Feed '{feedname}' removed from config, stopping container...")
+        feed = old_feeds[feedname]
+
+        # Check if container is running
+        with check_docker_container_running(feedname, feed) as is_running:
+            if is_running:
+                docker_container_stop(feedname, feed)
+
+        # Remove container
+        docker_container_remove(feedname, feed)
+        log.info(f"Container for feed '{feedname}' stopped and removed")
+
+    # Process modified feeds (check if config changed)
+    modified_feeds = []
+    for feedname in potentially_modified_feeds:
+        old_feed = old_feeds[feedname]
+        new_feed = new_feeds[feedname]
+
+        # Compare feed configurations (excluding runtime fields)
+        old_config = {
+            k: v
+            for k, v in old_feed.items()
+            if k not in ["active", "process", "failure_reason"]
+        }
+        new_config = {
+            k: v
+            for k, v in new_feed.items()
+            if k not in ["active", "process", "failure_reason"]
+        }
+
+        if old_config != new_config:
+            log.info(
+                f"Feed '{feedname}' configuration changed, restarting container..."
+            )
+            modified_feeds.append(feedname)
+
+            # Stop and remove old container
+            with check_docker_container_running(feedname, old_feed) as is_running:
+                if is_running:
+                    docker_container_stop(feedname, old_feed)
+            docker_container_remove(feedname, old_feed)
+
+            # Start new container with updated config
+            spawn_feed_instance(
+                feedname, new_feed, image_name, project_name, network_name
+            )
+        else:
+            # Configuration unchanged, keep existing state
+            new_feed["active"] = old_feed.get("active", False)
+            new_feed["process"] = old_feed.get("process")
+            if "failure_reason" in old_feed:
+                new_feed["failure_reason"] = old_feed["failure_reason"]
+
+    # Process added feeds
+    for feedname in added_feeds:
+        log.info(f"New feed '{feedname}' detected, spawning container...")
+        feed = new_feeds[feedname]
+        spawn_feed_instance(feedname, feed, image_name, project_name, network_name)
+
+    # Update global state
+    feeds = new_feeds
+    config_file_mtime = new_mtime
+
+    # Log summary
+    active_count = len(get_active_feeds())
+    log.info(
+        f"Feed synchronization complete: {active_count} active of {len(feeds)} total feeds"
+    )
+    if added_feeds:
+        log.info(f"  Added: {', '.join(added_feeds)}")
+    if removed_feeds:
+        log.info(f"  Removed: {', '.join(removed_feeds)}")
+    if modified_feeds:
+        log.info(f"  Modified: {', '.join(modified_feeds)}")
+
+
 # === Main execution logic ===
 def main():
     """Main function to spawn all ldes2sparql instances."""
@@ -409,62 +577,72 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Load configuration
-    config = load_config(config_file)
+    # Set global config file path
+    global config_file_path
+    config_file_path = Path(config_file)
 
-    # Populate feeds list
-    global feeds
-    feeds = config.get("feeds", [])
-    if not feeds:
-        log.error("No feeds defined in configuration file")
-        sys.exit(1)
-
-    log.info(f"Found {len(feeds)} LDES feed(s) to process")
-
-    for feedname, feed in feeds.items():
-        spawn_feed_instance(
-            feedname,
-            feed,
-            image_name,
-            project_name,
-            network_name,
-        )
+    # Initial feed synchronization (replaces old startup logic)
+    log.info("Performing initial feed synchronization...")
+    sync_feeds(config_file_path)
 
     active_feeds: dict[str, dict] = get_active_feeds()
 
     if not active_feeds:
-        log.error(f"No LDES consumers (out of {len(feeds)}) were started successfully")
+        log.error(
+            f"No LDES consumers (out of {len(feeds) if feeds else 0}) were started successfully"
+        )
         sys.exit(1)
 
     log.info(
         f"Successfully started {len(active_feeds)} of {len(feeds)} LDES consumer(s)"
     )
+
     log.info("Starting to monitor started processes... (Press Ctrl+C to stop)")
 
     # Monitor processes and restart if they have ended
-    while True:
-        time.sleep(monitor_interval)
-        active_feeds: dict[str, dict] = get_active_feeds()
+    # Also check config file for changes via polling
+    try:
+        while True:
+            time.sleep(monitor_interval)
 
-        log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
-        for feedname, feed in active_feeds.items():
-            log.info(f"Checking LDES consumer for feed '{feedname}'...")
-            with check_docker_container_running(feedname, feed) as is_running:
-                if is_running:
-                    log.info(f"LDES consumer for feed '{feedname}' is still running")
-                    continue  # still running
-                # else - container has stopped - attempt restart
-                log.warning(
-                    f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
-                )
-                docker_container_capture_logs(feedname, feed)
-                docker_container_start(
-                    feedname,
-                    feed,
-                    image_name,
-                    project_name,
-                    network_name,
-                )
+            # Check for config file changes via polling
+            try:
+                log.debug("Checking for config file changes via polling...")
+                sync_feeds(config_file_path)
+            except Exception as e:
+                log.error(f"Error during config file sync: {e}", exc_info=True)
+
+            active_feeds: dict[str, dict] = get_active_feeds()
+
+            log.info(f"Monitoring of {len(active_feeds)} LDES consumer(s)...")
+            for feedname, feed in active_feeds.items():
+                try:
+                    log.info(f"Checking LDES consumer for feed '{feedname}'...")
+                    with check_docker_container_running(feedname, feed) as is_running:
+                        if is_running:
+                            log.info(
+                                f"LDES consumer for feed '{feedname}' is still running"
+                            )
+                            continue  # still running
+                        # else - container has stopped - attempt restart
+                        log.warning(
+                            f"LDES consumer for feed '{feedname}' has stopped - capturing logs and attempting restart"
+                        )
+                        docker_container_capture_logs(feedname, feed)
+                        docker_container_start(
+                            feedname,
+                            feed,
+                            image_name,
+                            project_name,
+                            network_name,
+                        )
+                except Exception as e:
+                    log.error(f"Error monitoring feed '{feedname}': {e}", exc_info=True)
+    except KeyboardInterrupt:
+        log.info("Monitoring interrupted by user")
+    except Exception as e:
+        log.error(f"Fatal error in monitoring loop: {e}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
