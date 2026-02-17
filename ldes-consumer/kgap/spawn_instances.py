@@ -168,7 +168,6 @@ def docker_container_start(
     cmd.extend(["-e", f"TARGET_GRAPH={target_graph}"])
     cmd.extend(["-e", f"POLLING_FREQUENCY={polling_frequency}"])
     cmd.extend(["-e", "FAILURE_IS_FATAL=false"])
-    cmd.extend(["-e", "FOLLOW=true"])
 
     # Add any additional environment variables from the feed config
     added_envs: set[str] = set()
@@ -180,7 +179,6 @@ def docker_container_start(
                 "SPARQL_ENDPOINT",
                 "TARGET_GRAPH",
                 "FAILURE_IS_FATAL",
-                "FOLLOW",
                 "POLLING_FREQUENCY",
             }:
                 log.warning(
@@ -196,6 +194,9 @@ def docker_container_start(
     # Ensure OPERATION_MODE is set, default to 'sync' if not provided
     if "OPERATION_MODE" not in added_envs:
         cmd.extend(["-e", "OPERATION_MODE=Sync"])
+    # Ensure FOLLOW is set, default to true if not provided
+    if "FOLLOW" not in added_envs:
+        cmd.extend(["-e", "FOLLOW=true"])
     # Ensure MAXIMUM_BATCH_SIZE is set, default to 500 if not provided
     if "MEMBER_BATCH_SIZE" not in added_envs:
         cmd.extend(["-e", "MEMBER_BATCH_SIZE=500"])
