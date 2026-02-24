@@ -1,182 +1,248 @@
-# LDES Consumer Service
+# LDES Consumer Docker Image
 
-This service is a wrapper around the [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) tool that enables harvesting multiple LDES (Linked Data Event Streams) feeds.
+This Docker image reads and processes an `ldes-feeds.yaml` configuration file from a mounted volume and spawns child Docker containers for each feed using the `ldes2sparql` image.
 
-## Overview
+## Features
 
-The LDES consumer service reads a YAML configuration file containing a list of LDES feeds and spawns a separate `ldes2sparql` Docker container instance for each feed. All spawned containers are attached to the same Docker Compose network.
-
-## Configuration
-
-### Environment Variables
-
-The following environment variables can be configured in your `.env` file:
-
-- `LDES_CONFIG_FILE`: Path to the YAML configuration file (default: `/data/ldes-feeds.yaml`)
-- `LDES2SPARQL_IMAGE`: Docker image to use for ldes2sparql (default: `ghcr.io/maregraph-eu/ldes2sparql:latest`)
-- `LOG_LEVEL`: Logging level for the LDES consumer service (default: `INFO`). Available levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
-
-### LDES Feeds Configuration File
-
-Create a YAML file (e.g., `data/ldes-feeds.yaml`) with the following structure:
-
-```yaml
-feeds:
-  - name: example-feed-1
-    url: http://example.com/ldes-feed-1
-    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
-    polling_interval: 60  # seconds (optional, defaults to 60)
-    environment:  # optional additional environment variables
-      # Add any additional environment variables needed by ldes2sparql here
-      # EXAMPLE_VAR: value
-
-  - name: example-feed-2
-    url: http://example.com/ldes-feed-2
-    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
-    polling_interval: 120
-```
-
-#### Required fields:
-- `name`: Unique identifier for the feed (used in container naming)
-- `url`: URL of the LDES feed
-- `sparql_endpoint`: SPARQL endpoint where the data should be ingested
-
-#### Optional fields:
-- `polling_interval`: How often to poll the feed in seconds (default: 60). Note: This is converted to milliseconds and passed as `POLLING_FREQUENCY` to the ldes2sparql container.
-- `environment`: Additional environment variables to pass to the ldes2sparql container
-
-## Usage
-
-1. Ensure the ldes2sparql Docker image is available:
-   ```bash
-   docker pull ghcr.io/maregraph-eu/ldes2sparql:latest
-   ```
-   Or build it locally if needed.
-
-2. Copy the example configuration file:
-   ```bash
-   cp ldes-consumer/ldes-feeds.yaml.example data/ldes-feeds.yaml
-   ```
-
-3. Edit `data/ldes-feeds.yaml` with your LDES feeds
-
-4. Start the service using Docker Compose:
-   ```bash
-   docker compose up ldes-consumer
-   ```
-
-## How it Works
-
-1. The service reads the YAML configuration file on startup
-2. For each feed in the configuration, it spawns a new Docker container running `ldes2sparql`
-3. Each container is named `ldes-consumer-{feed-name}` and attached to the Docker Compose network
-4. Containers are labeled with the Docker Compose project name for integration with the stack
-5. The service monitors the spawned containers and automatically restarts them if they fail
-6. **NEW:** The service periodically checks the configuration file for changes and dynamically:
-   - Spawns new containers when feeds are added
-   - Stops and removes containers when feeds are removed
-   - Restarts containers when feed configurations are modified
-7. All containers are gracefully stopped when the service is terminated
-
-## Dynamic Feed Management
-
-The LDES consumer service now supports **dynamic addition, removal, and modification of feeds at runtime** without requiring a container restart.
-
-### How Dynamic Feed Management Works
-
-The service uses a polling mechanism to monitor the configuration file (`/data/ldes-feeds.yaml`) for changes. Every monitoring interval (default: 2 minutes), the service:
-
-1. Checks the file's modification time to detect if it has changed
-2. If changed, loads and validates the new configuration
-3. Compares the new feed list with currently running feeds
-4. Takes appropriate actions:
-   - **Added feeds**: New containers are spawned automatically
-   - **Removed feeds**: Existing containers are gracefully stopped and removed
-   - **Modified feeds**: Containers are restarted with the new configuration
-
-### Dynamic Usage Example
-
-To add a new feed at runtime:
-
-1. Edit the configuration file while the service is running:
-   ```bash
-   # Edit data/ldes-feeds.yaml and add a new feed
-   vim data/ldes-feeds.yaml
-   ```
-
-2. Save the file - the new feed container will be spawned automatically on the next polling cycle (within the monitoring interval)
-
-3. Check the logs to see the feed being added:
-   ```bash
-   docker compose logs -f ldes-consumer
-   ```
-
-You should see log messages like:
-```
-ldes-consumer - INFO - Synchronizing feeds with configuration file...
-ldes-consumer - INFO - New feed 'my-new-feed' detected, spawning container...
-ldes-consumer - INFO - Starting LDES consumer for feed: my-new-feed
-```
-
-### Use Cases for Dynamic Feed Management
-
-This feature is particularly useful for:
-
-- **On-demand harvesting**: A backend service or manager can add new LDES feeds to the YAML file programmatically, triggering automatic harvesting
-- **Configuration updates**: Modify feed parameters (polling interval, target graph, etc.) without downtime
-- **Feed lifecycle management**: Temporarily disable feeds by removing them, then re-enable later
-- **Integration with self-hosted platforms**: Perfect for platforms like [mtt-self-host-platform](https://github.com/marine-term-translations/mtt-self-host-platform) where users can request new data streams
-
-### Configuration
-
-The monitoring interval can be configured using the `LDES_MONITOR_INTERVAL` environment variable (in seconds, default: 120).
-
-### Technical Details
-
-- File modification time is checked to detect actual changes
-- Polling interval is configurable via environment variable
-- Invalid YAML or configuration errors preserve the current running state
-- The configuration file is the single source of truth - no state is persisted elsewhere
-- No additional dependencies required - uses only standard Python libraries
-
-## Container Naming
-
-Spawned containers follow the naming convention: `ldes-consumer-{feed-name}`
-
-For example, a feed named `marine-observations` will create a container named `ldes-consumer-marine-observations`.
-
-## Network Integration
-
-All spawned ldes2sparql containers are attached to the same Docker network as the main stack (typically `kgap_default`), allowing them to communicate with other services like GraphDB.
+- **YAML Configuration**: Reads feed configurations from `ldes-feeds.yaml`
+- **Container Spawning**: Automatically spawns a Docker container for each feed
+- **Docker Compose Integration**: Spawned containers inherit the parent's Docker Compose project labels and network
+- **Per-Feed State Management**: Each feed maintains its own isolated state directory for resuming and tracking progress
+- **Real-Time Event Monitoring**: Uses Docker event stream for efficient container status monitoring (instead of polling)
+- **Environment Variables**: Full per-feed environment variable configuration from YAML
+- **Graceful Shutdown**: Handles automatic cleanup of spawned containers on shutdown
+- **Container Health Tracking**: Monitors container events: start, stop, die, health status, and removal
 
 ## Logging
 
-The LDES consumer service uses structured logging with configurable log levels. 
+The LDES consumer automatically configures logging for all spawned containers:
 
-### Log Levels
+- **State files**: Each feed gets its own state directory in `/data/ldes-consumer/state/{feed_name}/` (maps to `/state` in child containers)
+- Each feed maintains its own LDES client state for resuming and tracking progress
 
-Set the `LOG_LEVEL` environment variable to control the verbosity of logs:
-- `DEBUG`: Detailed information for debugging (includes Docker commands)
-- `INFO`: General informational messages (default)
-- `WARNING`: Warning messages for potential issues
-- `ERROR`: Error messages for failures
-- `CRITICAL`: Critical errors that prevent operation
+### Log Directory Structure
 
-### Viewing Logs
+```
+data/
+├── ldes-feeds.yaml
+└── ldes-consumer/
+    └── state/
+        ├── feed-1/         # State files for feed-1
+        ├── feed-2/         # State files for feed-2
+        └── feed-n/         # State files for feed-n
+```
 
-Logs from the spawner service can be viewed using:
+## Requirements
+
+The Docker socket must be mounted to allow the container to spawn child containers:
+- Mount `/var/run/docker.sock:/var/run/docker.sock`
+
+## Container Monitoring
+
+The LDES consumer uses **event-based monitoring** (via Docker's event stream API) for real-time container status tracking:
+
+- **Real-Time Events**: Listens for container events (start, stop, die, health_status, destroy) from the Docker daemon
+- **Zero Polling Overhead**: Instead of constantly polling container status every N seconds, the application responds instantly to events
+- **Memory Efficient**: Uses event streams instead of continuous polling, significantly reducing CPU and memory usage
+- **Detailed Status Tracking**: Tracks and displays status for all spawned containers with immediate feedback on state changes
+
+### Monitored Events
+
+- `✓ start/running` - Container started or is running
+- `⊘ stop/stopped` - Container stopped gracefully
+- `✗ die` - Container exited (includes exit code)
+- `⚕ health_status` - Container health check status changed
+- `← destroy` - Container was removed
+
+### Fallback Status Checking
+
+If Docker events are not being received (e.g., due to Docker daemon issues), the application includes a **fallback mechanism**:
+
+- Periodic status checks run every 10 seconds as a safety net
+- Displays status changes: `[Fallback] Status change: container-name - running → exited`
+- Shows overall running container count: `[Fallback] Status: X/Y containers running`
+
+**Note**: The fallback checks are less efficient than event-based monitoring but ensure you always have visibility into container status.
+
+### Debugging the Event Listener
+
+When containers start, you should see output like:
+```
+[Event Listener] Stream started, waiting for events...
+[Event] START - ldes-consumer-feed1 (abc123def456)
+  ✓ Container started: /ldes-consumer-feed1
+    [Status] 1/2 containers running
+```
+
+If you don't see event messages:
+1. Check Docker socket is mounted: `-v /var/run/docker.sock:/var/run/docker.sock`
+2. Check Docker daemon is running: `docker ps`
+3. Look for `[Fallback]` messages that indicate the fallback status checker is working
+4. Verify container names match the expected pattern: `ldes-consumer-{feed_name}`
+
+## Building the Docker Image
+
 ```bash
-docker compose logs ldes-consumer
+cd ldes-consumer
+docker build -t ldes-consumer:latest .
 ```
 
-Logs from individual ldes2sparql containers can be viewed using:
+## Running the Container
+
+To run the container with a mounted volume containing your `ldes-feeds.yaml` file:
+
 ```bash
-docker logs ldes-consumer-{feed-name}
+docker run -v /path/to/your/data:/data -v /var/run/docker.sock:/var/run/docker.sock ldes-consumer:latest
 ```
 
-### Log Format
+**Important**: The Docker socket (`/var/run/docker.sock`) must be mounted to allow the container to spawn child containers.
 
-Logs are formatted with timestamp, logger name, level, and message:
+### Example with the data folder from this repository:
+
+```bash
+# From the root of the repository
+docker run -v "$(pwd)/data:/data" -v /var/run/docker.sock:/var/run/docker.sock ldes-consumer:latest
 ```
-2025-10-28 14:20:00 - ldes-consumer - INFO - Starting LDES consumer for feed: example-feed-1
+
+### Windows PowerShell:
+
+```powershell
+docker run -v "${PWD}/data:/data" -v /var/run/docker.sock:/var/run/docker.sock ldes-consumer:latest
 ```
+
+### Windows CMD:
+
+```cmd
+docker run -v "%cd%/data:/data" -v /var/run/docker.sock:/var/run/docker.sock ldes-consumer:latest
+```
+
+## Configuration
+
+The application expects the configuration file at `/data/ldes-feeds.yaml` inside the container. You can customize this path by setting the `LDES_CONFIG_PATH` environment variable:
+
+```bash
+docker run -v /path/to/data:/my-data -e LDES_CONFIG_PATH=/my-data/ldes-feeds.yaml ldes-consumer:latest
+```
+
+### Environment Variables
+
+- **`LDES_CONFIG_PATH`**: Path to the YAML configuration file (default: `/data/ldes-feeds.yaml`)
+- **`LDES2SPARQL_IMAGE`**: Docker image to use for spawning child containers (default: `ghcr.io/maregraph-eu/ldes2sparql:latest`)
+- **`DOCKER_NETWORK`**: Docker network to attach spawned containers to (optional)
+- **`HOST_PWD`**: Host working directory for volume mounts (optional)
+- **`DEFAULT_SPARQL_ENDPOINT`**: Default SPARQL endpoint for spawned containers (optional, but recommended)
+- **`GRAPH_PREFIX`**: Prefix used in target graph URN pattern (default: `"ldes"`, used in `urn:kgap:{prefix}:{feedname}`)
+
+### LDES2SPARQL Container Environment Variables
+
+The LDES consumer automatically sets the following environment variables for each spawned ldes2sparql container. **All of these can be overridden** in the feed's `environment` section in your YAML configuration:
+
+#### Default Environment Variables:
+
+- **`FEED_NAME`**: The feed identifier from the YAML configuration
+- **`FEED_URL`**: The feed URL from the YAML configuration
+- **`LDES`**: The LDES feed URL (same as FEED_URL, required by ldes2sparql)
+- **`PERF_NAME`**: Performance logging identifier (same as FEED_NAME)
+- **`SPARQL_ENDPOINT`**: The target SPARQL endpoint URL (default: from `DEFAULT_SPARQL_ENDPOINT` env var)
+- **`TARGET_GRAPH`**: The target named graph IRI (default: `urn:kgap:{GRAPH_PREFIX}:{feedname}`)
+- **`OPERATION_MODE`**: Either "Sync" or "Replication" (default: `"Replication"`)
+  - **Sync**: Uses SPARQL UPDATE protocol, supports Create/Update/Delete operations
+  - **Replication**: Uses Graph Store Protocol, faster but only supports additions
+- **`FOLLOW`**: Whether to continuously follow the feed (default: `"false"`)
+- **`MEMBER_BATCH_SIZE`**: Number of members to process in each batch (default: `"500"`)
+- **`SHAPE`**: SHACL shape for validation (default: `""` - empty string to prevent crashes)
+
+#### Overriding Defaults
+
+You can override **any** of these defaults for specific feeds in your `ldes-feeds.yaml`:
+
+```yaml
+feeds:
+  my-feed:
+    url: https://example.com/feed.ttl
+    target_graph: urn:custom:graph:my-feed  # Alternative: set at feed level
+    environment:
+      # Override any default environment variable
+      OPERATION_MODE: "Sync"  # Override to use Sync mode
+      FOLLOW: "true"  # Enable continuous following
+      MEMBER_BATCH_SIZE: "1000"  # Process 1000 members per batch
+      SPARQL_ENDPOINT: "http://custom-endpoint:8890/sparql"  # Custom endpoint
+      TARGET_GRAPH: "urn:custom:graph:my-feed"  # Custom target graph IRI
+      # Add any additional custom variables
+      MATERIALIZE: "true"
+      CUSTOM_VAR: "value"
+```
+
+## Expected YAML Format
+
+The `ldes-feeds.yaml` file should have the following structure:
+
+```yaml
+feeds:
+  feed-name:
+    url: https://example.com/feed.ttl
+    target_graph: urn:custom:graph:feed-name  # Optional: custom target graph IRI
+    environment:
+      KEY: "value"
+      MATERIALIZE: "true"
+```
+
+**Note**: The `target_graph` field can be set at the feed level (as shown above) or in the `environment` section as `TARGET_GRAPH`.
+
+### How it Works
+
+For each feed defined in the YAML file:
+1. The application reads the feed configuration
+2. Default environment variables are set for all required parameters
+3. Any values in the feed's `environment` section override the defaults
+4. A per-feed state directory is created at `/data/ldes-consumer/state/{feed_name}/`
+5. A child Docker container is spawned using the `LDES2SPARQL_IMAGE` with the final environment variables
+6. The feed-specific state directory is mounted to `/state` in the child container
+7. If running in Docker Compose, child containers inherit the project labels and network
+
+Example: For the `bodc-P02` feed with URL `https://kgfixed.github.io/vocab.nerc.ac.uk/P02/latest.ttl` and `MATERIALIZE: "false"`, the spawned container will have:
+- `FEED_NAME=bodc-P02`
+- `FEED_URL=https://kgfixed.github.io/vocab.nerc.ac.uk/P02/latest.ttl`
+- `LDES=https://kgfixed.github.io/vocab.nerc.ac.uk/P02/latest.ttl`
+- `PERF_NAME=bodc-P02`
+- `SPARQL_ENDPOINT=<from DEFAULT_SPARQL_ENDPOINT>`
+- `TARGET_GRAPH=urn:kgap:ldes:bodc-P02`
+- `OPERATION_MODE=Replication`
+- `FOLLOW=false`
+- `MEMBER_BATCH_SIZE=500`
+- `SHAPE=`
+- `MATERIALIZE=false` (custom override from environment)
+- Volume: `/data/ldes-consumer/state/bodc-P02` → `/state`
+
+## Using with Docker Compose
+
+The root `docker-compose.yaml` is already configured to run the LDES consumer with proper volume mounts:
+
+```bash
+# From the root of the repository
+docker-compose up ldes-consumer
+```
+
+### Docker Compose Project Integration
+
+When running via Docker Compose, the LDES consumer automatically:
+- Detects it's part of a Docker Compose project
+- Applies the same project labels to all spawned child containers
+- This ensures spawned containers appear under the same project in `docker-compose ps` and similar commands
+
+To add this service to your own `docker-compose.yaml`:
+
+```yaml
+services:
+  ldes-consumer:
+    build: ./ldes-consumer
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock  # Required!
+    environment:
+      - LDES_CONFIG_PATH=/data/ldes-feeds.yaml
+      - LDES2SPARQL_IMAGE=ghcr.io/maregraph-eu/ldes2sparql:latest
+      - DOCKER_NETWORK=${COMPOSE_PROJECT_NAME:-kgap}_default
+```
+
+**Note**: The Docker socket mount is crucial for spawning child containers.
