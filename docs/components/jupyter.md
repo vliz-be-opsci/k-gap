@@ -1,3 +1,9 @@
+---
+title: Jupyter Component
+parent: Components
+nav_order: 2
+---
+
 # Jupyter Component
 
 The Jupyter component provides an interactive notebook environment for exploring, analyzing, and visualizing knowledge graph data.

@@ -1,3 +1,8 @@
+---
+title: Quick Reference
+nav_order: 4
+---
+
 # K-GAP Quick Reference
 
 Quick reference guide for common K-GAP operations.

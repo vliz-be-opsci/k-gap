@@ -1,3 +1,9 @@
+---
+title: GraphDB Component
+parent: Components
+nav_order: 1
+---
+
 # GraphDB Component
 
 The GraphDB component is the core RDF triple store for K-GAP, providing SPARQL query capabilities and persistent storage for knowledge graphs.

@@ -1,3 +1,9 @@
+---
+title: Sembench Component
+parent: Components
+nav_order: 3
+---
+
 # Sembench Component
 
 The Sembench component is a Python-based semantic processing engine that provides scheduled data processing and transformation capabilities using the [py-sema](https://github.com/vliz-be-opsci/py-sema) library.

@@ -55,18 +55,19 @@ docs/
 
 ## Theme and Styling
 
-The documentation uses the **Cayman** theme, which provides:
-- Clean, modern design
+The documentation uses the **Just the Docs** theme to provide a book-style experience:
+- Left sidebar navigation with ordered chapters
+- Built-in search across pages
 - Responsive layout (mobile-friendly)
 - Syntax highlighting for code blocks
-- Navigation breadcrumbs
 
 Configuration is in `docs/_config.yml`:
 ```yaml
-theme: jekyll-theme-cayman
+remote_theme: just-the-docs/just-the-docs
 title: K-GAP Documentation
 description: Knowledge Graph Analysis Platform - Comprehensive Documentation
 show_downloads: false
+search_enabled: true
 ```
 
 ## Customization

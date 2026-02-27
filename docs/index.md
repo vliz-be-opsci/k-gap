@@ -1,3 +1,8 @@
+---
+title: K-GAP Documentation
+nav_order: 1
+---
+
 # K-GAP Documentation
 
 **Knowledge Graph Analysis Platform**
@@ -6,10 +11,22 @@ K-GAP is a microservices-based platform for building, managing, and analyzing kn
 
 ## Quick Navigation
 
+- **[Workflow Guide](./workflow.md)** - Step-by-step book-style workflow
 - **[Quick Reference](./quick-reference.md)** - Common commands and patterns
 - **[FAQ](./faq.md)** - Frequently asked questions
 - **[Advanced Topics](./advanced-topics.md)** - Advanced usage patterns
 - **[GitHub Pages Setup](./GITHUB_PAGES.md)** - Publishing this documentation
+
+## Book Structure
+
+Follow this documentation in order as a user guide:
+
+1. **[Getting Started & Platform Overview](./index.md)** - Understand architecture and deploy K-GAP
+2. **[Workflow Guide](./workflow.md)** - Execute the end-to-end K-GAP workflow step by step
+3. **[Component Guides](./components/graphdb.md)** - Deep-dive into each service
+4. **[Quick Reference](./quick-reference.md)** - Copy/paste commands for daily use
+5. **[Advanced Topics](./advanced-topics.md)** - Optimization and advanced patterns
+6. **[FAQ](./faq.md)** - Troubleshooting and common questions
 
 ## Table of Contents
 
