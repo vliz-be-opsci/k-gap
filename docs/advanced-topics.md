@@ -1,3 +1,8 @@
+---
+title: Advanced Topics
+nav_order: 5
+---
+
 # Advanced Topics
 
 This section covers advanced K-GAP concepts and patterns.

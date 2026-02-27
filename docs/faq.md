@@ -1,3 +1,8 @@
+---
+title: FAQ
+nav_order: 6
+---
+
 # Frequently Asked Questions (FAQ)
 
 Common questions and answers about K-GAP.

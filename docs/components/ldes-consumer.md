@@ -1,3 +1,9 @@
+---
+title: LDES Consumer Component
+parent: Components
+nav_order: 4
+---
+
 # LDES Consumer Component
 
 The LDES Consumer is a multi-feed harvesting service that wraps [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) to automatically ingest data from multiple Linked Data Event Streams (LDES) into GraphDB.
