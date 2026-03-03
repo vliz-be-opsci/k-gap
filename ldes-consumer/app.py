@@ -240,7 +240,7 @@ def process_feeds(feeds_config, docker_client, ldes2sparql_image):
         env_vars = {
             # Core feed identifiers
             "SPARQL_ENDPOINT": feed_env.get(
-                "SPARQL_ENDPOINT", os.environ.get("DEFAULT_SPARQL_ENDPOINT", "")
+                "SPARQL_ENDPOINT", os.environ.get("DEFAULT_SPARQL_ENDPOINT", "http://graphdb:7200/repositories/kgap/statements")
             ),
             "TARGET_GRAPH": target_graph,
             "FOLLOW": feed_env.get("FOLLOW", "false"),
