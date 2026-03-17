@@ -116,16 +116,9 @@ def load_ldes_feeds(config_path):
     Returns:
         Dictionary containing the feeds configuration
     """
-    try:
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-        return config
-    except FileNotFoundError:
-        logger.error(f"Configuration file not found at {config_path}")
-        sys.exit(1)
-    except yaml.YAMLError as e:
-        logger.error(f"Error parsing YAML file: {e}")
-        sys.exit(1)
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    return config
 
 
 def process_feeds(feeds_config, docker_client, ldes2sparql_image):
@@ -541,7 +534,14 @@ def main():
         sys.exit(1)
 
     # Load feeds BEFORE starting containers
-    feeds_config = load_ldes_feeds(config_path)
+    try:
+        feeds_config = load_ldes_feeds(config_path)
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found at {config_path}")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML file: {e}")
+        sys.exit(1)
 
     # Initialize empty containers list that will be filled after spawning
     containers = []
