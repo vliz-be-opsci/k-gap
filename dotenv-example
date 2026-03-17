@@ -37,3 +37,4 @@ LDES_LOG_LEVEL=DEBUG
 # LDES_CLEAR_STATE=0
 # LDES_REMOVE_CONTAINERS defaults to 1; set to 0 to reuse existing containers
 # LDES_REMOVE_CONTAINERS=1
+RESTART=unless-stopped #'no', 'always', 'on-failure', or 'unless-stopped'"

@@ -1,0 +1,38 @@
+# See book at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: k-gap-documentation
+  title: K-GAP Documentation
+  description: Knowledge Graph Analysis Platform - A comprehensive guide to building, managing, and analyzing knowledge graphs using SPARQL and linked data technologies.
+  github: https://github.com/vliz-be-opsci/k-gap
+  keywords: ["knowledge graph", "linked data", "SPARQL", "LDES", "RDF", "GraphDB", "semantic web", "data analysis"]
+  open_access: true
+  license:
+    content:
+      id: MIT
+  toc:
+    - file: index.md
+    - title: Workflow Guide
+      children:
+          - file: workflow.md
+    - title: Components
+      children:
+          - file: components/graphdb.md
+          - file: components/jupyter.md
+          - file: components/sembench.md
+          - file: components/ldes-consumer.md
+    - title: Reference
+      children:
+          - file: quick-reference.md
+          - file: advanced-topics.md
+          - file: faq.md
+site:
+  template: book-theme
+  actions:
+    - title: GitHub
+      url: "https://github.com/vliz-be-opsci/k-gap"
+    - title: Issues
+      url: "https://github.com/vliz-be-opsci/k-gap/issues"
+  options:
+    logoText: K-GAP
+    hideFooterText: false

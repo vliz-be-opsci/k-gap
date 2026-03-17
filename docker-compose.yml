@@ -79,13 +79,13 @@ services:
     image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}
     container_name: test_kgap_ldes_consumer
     volumes:
-      - "./data:/data"
+      - "./data:/data"  # Mounted volume; host path is auto-detected via container introspection
       - "/var/run/docker.sock:/var/run/docker.sock"  # Required to spawn docker containers
     env_file:
       - ./.env
     environment:
       DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-kgap}_default
-      HOST_PWD: ${PWD}
+      # HOST_PWD: legacy fallback no longer required (mount introspection now used)
       DEFAULT_SPARQL_ENDPOINT: "http://graphdb:7200/repositories/${GDB_REPO:-kgap}/statements" # for updates
     depends_on:
       graphdb:
