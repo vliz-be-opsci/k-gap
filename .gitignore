@@ -60,3 +60,6 @@ Thumbs.db
 # Temporary files
 /tmp/
 *.tmp
+
+# myst docs 
+docs/_build/
