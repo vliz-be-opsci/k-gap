@@ -40,13 +40,13 @@ def get_compose_labels(docker_client):
         dict: Dictionary of compose-related labels, or empty dict if not in compose
     """
     try:
-        # Get the current container's hostname (container ID)
-        hostname = os.getenv("HOSTNAME")
-        if not hostname:
+        # Resolve current container id/name from runtime introspection.
+        container_ref = get_current_container_ref()
+        if not container_ref:
             return {}
 
         # Get the current container
-        container = docker_client.containers.get(hostname)
+        container = docker_client.containers.get(container_ref)
         labels = container.labels
 
         # Extract compose-related labels
@@ -73,6 +73,52 @@ def get_compose_labels(docker_client):
         return {}
 
 
+def get_current_container_ref() -> str | None:
+    """
+    Identify the current container id/name using runtime introspection.
+
+    Returns:
+        Container id/name, or None when not running in a Docker container
+    """
+    # Try cgroup introspection first (works without env vars).
+    try:
+        cgroup_path = Path("/proc/self/cgroup")
+        if cgroup_path.exists():
+            for line in cgroup_path.read_text(
+                encoding="utf-8", errors="ignore"
+            ).splitlines():
+                if not line:
+                    continue
+                value = line.rsplit("/", 1)[-1].strip()
+                if not value:
+                    continue
+
+                # Typical Docker cgroup id forms.
+                if len(value) == 64 and all(
+                    c in "0123456789abcdef" for c in value.lower()
+                ):
+                    return value
+                if value.startswith("docker-") and value.endswith(".scope"):
+                    container_id = value[len("docker-") : -len(".scope")]
+                    if container_id:
+                        return container_id
+    except Exception as e:
+        logger.debug(f"Could not inspect /proc/self/cgroup: {e}")
+
+    # Fallback to kernel hostname file (still runtime introspection, no env var).
+    try:
+        hostname_file = Path("/etc/hostname")
+        if hostname_file.exists():
+            value = hostname_file.read_text(encoding="utf-8", errors="ignore").strip()
+            if value:
+                return value
+    except Exception as e:
+        logger.debug(f"Could not inspect /etc/hostname: {e}")
+
+    logger.warning("Could not determine current container reference via introspection")
+    return None
+
+
 def get_parent_network(docker_client):
     """
     Detect the network that the current container is connected to.
@@ -84,13 +130,13 @@ def get_parent_network(docker_client):
         str: Network name, or None if detection fails
     """
     try:
-        # Get the current container's hostname (container ID)
-        hostname = os.getenv("HOSTNAME")
-        if not hostname:
+        # Resolve current container id/name from runtime introspection.
+        container_ref = get_current_container_ref()
+        if not container_ref:
             return None
 
         # Get the current container
-        container = docker_client.containers.get(hostname)
+        container = docker_client.containers.get(container_ref)
         networks = container.attrs.get("NetworkSettings", {}).get("Networks", {})
 
         # Get the first network (usually there's only one, or we pick the first)
@@ -103,6 +149,69 @@ def get_parent_network(docker_client):
 
     except Exception as e:
         logger.warning(f"Could not detect parent network: {e}")
+        return None
+
+
+def get_host_path_from_mounts(docker_client, container_path: str) -> str | None:
+    """
+    Resolve a container-internal path to its host path by inspecting
+    the current container's volume mounts.
+
+    Args:
+        docker_client: Docker client instance
+        container_path: Absolute path inside this container
+
+    Returns:
+        Host path for the mounted location, or None if no match is found
+    """
+    try:
+        container_ref = get_current_container_ref()
+        if not container_ref:
+            logger.warning(
+                "Could not inspect mounts without current container reference"
+            )
+            return None
+
+        container = docker_client.containers.get(container_ref)
+        mounts = container.attrs.get("Mounts", [])
+
+        # Choose the longest destination prefix so nested mounts resolve correctly.
+        best_source = None
+        best_destination = None
+        best_len = -1
+
+        normalized_path = container_path.rstrip("/")
+        for mount in mounts:
+            destination = mount.get("Destination", "").rstrip("/")
+            source = mount.get("Source", "").rstrip("/")
+            if not destination or not source:
+                continue
+
+            if normalized_path == destination or normalized_path.startswith(
+                destination + "/"
+            ):
+                if len(destination) > best_len:
+                    best_len = len(destination)
+                    best_destination = destination
+                    best_source = source
+
+        if best_source is None or best_destination is None:
+            logger.warning(f"No mount found covering container path: {container_path}")
+            return None
+
+        if normalized_path == best_destination:
+            host_path = best_source
+        else:
+            subpath = normalized_path[len(best_destination) :].lstrip("/")
+            host_path = f"{best_source}/{subpath}"
+
+        logger.info(
+            f"Resolved container path '{container_path}' to host path '{host_path}'"
+        )
+        return host_path
+
+    except Exception as e:
+        logger.warning(f"Could not resolve host path from mounts: {e}")
         return None
 
 
@@ -141,8 +250,25 @@ def process_feeds(feeds_config, docker_client, ldes2sparql_image):
     logger.info(f"Found {len(feeds)} feed(s) in configuration")
 
     containers = []
-    host_pwd = os.getenv("HOST_PWD", os.getcwd())
     graph_prefix = os.getenv("GRAPH_PREFIX", "ldes")
+
+    # Resolve host base path for state directories from this container's mounts.
+    state_container_base = "/data/ldes-consumer/state"
+    host_state_base = get_host_path_from_mounts(docker_client, state_container_base)
+
+    if host_state_base is None:
+        # Backward-compatible fallback for non-standard environments.
+        host_pwd = os.getenv("HOST_PWD")
+        if host_pwd:
+            host_state_base = f"{host_pwd.rstrip('/')}/data/ldes-consumer/state"
+            logger.info(
+                f"Falling back to HOST_PWD for state directory base: {host_state_base}"
+            )
+        else:
+            logger.error(
+                "Cannot determine host state path: no matching mount found and HOST_PWD is not set"
+            )
+            return []
 
     # Get restart policy from environment (default: no, no automatic restart)
     default_restart_policy = os.getenv("RESTART", "no")
@@ -206,7 +332,7 @@ def process_feeds(feeds_config, docker_client, ldes2sparql_image):
         logger.info(f"  URL: {feed_data.get('url', 'N/A')}")
 
         # Prepare per-feed volume mounts
-        feed_state_dir = f"{host_pwd}/data/ldes-consumer/state/{feed_name}"
+        feed_state_dir = f"{host_state_base}/{feed_name}"
 
         # Ensure state directory exists
         Path(feed_state_dir).mkdir(parents=True, exist_ok=True)
@@ -233,7 +359,11 @@ def process_feeds(feeds_config, docker_client, ldes2sparql_image):
         env_vars = {
             # Core feed identifiers
             "SPARQL_ENDPOINT": feed_env.get(
-                "SPARQL_ENDPOINT", os.environ.get("DEFAULT_SPARQL_ENDPOINT", "http://graphdb:7200/repositories/kgap/statements")
+                "SPARQL_ENDPOINT",
+                os.environ.get(
+                    "DEFAULT_SPARQL_ENDPOINT",
+                    "http://graphdb:7200/repositories/kgap/statements",
+                ),
             ),
             "TARGET_GRAPH": target_graph,
             "FOLLOW": feed_env.get("FOLLOW", "false"),

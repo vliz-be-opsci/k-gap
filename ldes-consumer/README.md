@@ -128,8 +128,7 @@ docker run -v /path/to/data:/my-data -e LDES_CONFIG_PATH=/my-data/ldes-feeds.yam
 
 - **`LDES_CONFIG_PATH`**: Path to the YAML configuration file (default: `/data/ldes-feeds.yaml`)
 - **`LDES2SPARQL_IMAGE`**: Docker image to use for spawning child containers (default: `ghcr.io/maregraph-eu/ldes2sparql:latest`)
-- **`DOCKER_NETWORK`**: Docker network to attach spawned containers to (optional)
-- **`HOST_PWD`**: Host working directory for volume mounts (optional)
+- **`DOCKER_NETWORK`**: Docker network to attach spawned containers to (auto-detected from parent container, optional fallback)
 - **`DEFAULT_SPARQL_ENDPOINT`**: Default SPARQL endpoint for spawned containers (optional, but recommended)
 - **`GRAPH_PREFIX`**: Prefix used in target graph URN pattern (default: `"ldes"`, used in `urn:kgap:{prefix}:{feedname}`)
 

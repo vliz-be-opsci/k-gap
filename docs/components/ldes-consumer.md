@@ -109,13 +109,23 @@ The LDES Consumer service reads a YAML configuration file containing multiple LD
 | `LOG_LEVEL` | `INFO` | Logging level for LDES Consumer (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `DOCKER_NETWORK` | Auto-detected | Docker network for spawned containers (auto-detected from parent) |
 | `COMPOSE_PROJECT_NAME` | `kgap` | Docker Compose project name (used for labels) |
-| `HOST_PWD` | Current working directory | Host path for mounting state directories |
 | `GRAPH_PREFIX` | `ldes` | Prefix for default target graph URIs |
 | `GDB_REPO` | `kgap` | GraphDB repository name |
 | `DEFAULT_SPARQL_ENDPOINT` | `http://graphdb:7200/repositories/{GDB_REPO}/statements` | Default SPARQL endpoint for ingestion |
 | `REMOVE_ORPHANS` | `false` | Remove containers not in current configuration (true/false) |
 | `LDES_LOG_LEVEL` | (inherits from LOG_LEVEL) | Log level passed to ldes2sparql containers |
 | `RESTART` | `no` | Default restart policy for spawned containers |
+
+#### Path Resolution
+
+The LDES Consumer automatically resolves host paths for state directories using **container mount introspection**. It inspects the `/proc/self/cgroup` file and Docker container mounts to determine the host path backing the `/data` volume, eliminating the need for manual `HOST_PWD` configuration.
+
+This approach works seamlessly with:
+- **Bind mounts** (e.g., `./data:/data` in Docker Compose) → resolves to the host filesystem path
+- **Named volumes** (e.g., Docker-managed volumes) → resolves to the Docker volume location
+- **Any container orchestration** that exposes mount metadata via the Docker API
+
+If mount introspection fails in unusual environments, you can set `HOST_PWD` as a fallback, but this is rarely needed.
 
 ### LDES Feeds Configuration File
 
