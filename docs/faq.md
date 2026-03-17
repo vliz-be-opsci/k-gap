@@ -177,6 +177,14 @@ curl -X POST \
 **Via Mounted Volume**:
 Place files in `./data` and import via workbench.
 
+### Are RDF files in `./data` imported automatically?
+
+No. Files placed in `./data` are only mounted into the GraphDB container; you still need to import them explicitly via:
+- GraphDB Workbench (Import → RDF), or
+- GraphDB REST API (`POST /repositories/{repo}/statements`).
+
+If you need repeatable imports as part of a pipeline, model that as a processing step in your `data/sembench.yaml` workflow (for example, executing a scripted HTTP upload step).
+
 ### How do I export data?
 
 ```bash

@@ -12,6 +12,8 @@ The Jupyter component provides an interactive notebook environment for exploring
 
 The Jupyter component is built on the official Jupyter base notebook and includes pre-configured tools for working with RDF/SPARQL data and the K-GAP platform.
 
+General Jupyter documentation is available at [docs.jupyter.org](https://docs.jupyter.org/en/latest/).
+
 **Base Image**: `jupyter/base-notebook`  
 **Exposed Port**: 8889 (maps to internal port 8888)  
 **Container Name**: `test_kgap_jupyter` (in test setup)
@@ -53,6 +55,8 @@ The Jupyter component is built on the official Jupyter base notebook and include
 ## Configuration
 
 ### Environment Variables
+
+These variables are managed via the repository root `.env` file (initialized from `dotenv-example`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|

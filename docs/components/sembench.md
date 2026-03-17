@@ -140,7 +140,7 @@ workflows:
         # ... step configuration
 ```
 
-For detailed configuration options, refer to the [py-sema documentation](https://github.com/vliz-be-opsci/py-sema).
+For detailed configuration options, refer to the [py-sema bench module documentation](https://github.com/vliz-be-opsci/py-sema/blob/main/sema/bench/README.md).
 
 ### Starting Sembench
 

@@ -49,6 +49,8 @@ GraphDB is a semantic graph database that stores RDF triples and provides:
 
 ### Environment Variables
 
+These variables are defined in the repository root `.env` file (copy `dotenv-example` to `.env` and adjust values for your deployment).
+
 The following environment variables configure the GraphDB instance:
 
 | Variable | Default | Description |
@@ -143,6 +145,8 @@ Navigate to http://localhost:7200 in your browser to access:
 - Import/export tools
 - Repository statistics
 
+For detailed Workbench usage, see the official GraphDB documentation: [Working with Workbench](https://graphdb.ontotext.com/documentation/11.2/working-with-workbench.html) (version-specific; adapt to your deployed GraphDB version if needed).
+
 #### SPARQL Endpoint
 
 The SPARQL endpoint is available at:
@@ -201,7 +205,7 @@ curl -X POST \
 
 #### Via Mounted Volume
 
-Place RDF files in the `./data` directory, which is mounted at `/root/graphdb-import/data` in the container. You can then import them via the web interface or REST API.
+Place RDF files in the `./data` directory, which is mounted at `/root/graphdb-import/data` in the container. Files are not imported automatically from this mount; import them via the web interface or REST API. See [FAQ: How do I import RDF data?](../faq.md#how-do-i-import-rdf-data) for the detailed options.
 
 ### Exporting Data
 
