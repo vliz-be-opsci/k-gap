@@ -111,6 +111,65 @@ GDB_JAVA_OPTS: "-Xms8g -Xmx16g ..."  # 8GB min, 16GB max heap
 
 Adjust these values based on your system resources and workload.
 
+### Configuration Examples
+
+#### Minimal Setup (Development)
+
+For development or testing environments:
+
+```bash
+# .env file
+COMPOSE_PROJECT_NAME=kgap
+GDB_REPO=kgap
+REPOLABEL=Development Repository
+GDB_MAX_HEADER=65536
+GDB_JAVA_OPTS="-Xms2g -Xmx4g"
+```
+
+#### Standard Setup (Production)
+
+For typical production deployments:
+
+```bash
+# .env file
+COMPOSE_PROJECT_NAME=kgap-prod
+GDB_REPO=kgap_production
+REPOLABEL=K-GAP Production Repository
+GDB_MAX_HEADER=65536
+GDB_HOME_FOLDER=/data/graphdb
+GDB_JAVA_OPTS="-Xms8g -Xmx16g -Dcom.ontotext.graphdb.monitoring.jmx=true"
+```
+
+#### Large-Scale Setup (High Volume)
+
+For high-volume triple stores with many concurrent queries:
+
+```bash
+# .env file
+COMPOSE_PROJECT_NAME=kgap-enterprise
+GDB_REPO=kgap_enterprise
+REPOLABEL=K-GAP Enterprise Repository
+GDB_MAX_HEADER=131072  # Increased for large query results
+GDB_HOME_FOLDER=/data/graphdb  # Persist data
+GDB_JAVA_OPTS="-Xms32g -Xmx64g -Dcom.ontotext.graphdb.monitoring.jmx=true -XX:+UseG1GC"
+```
+
+#### Persistent Data Storage
+
+To persist GraphDB data across container restarts:
+
+```bash
+# 1. Create persistent directory
+mkdir -p ./data/graphdb
+
+# 2. Set in .env
+GDB_HOME_FOLDER=/data/graphdb
+
+# 3. Verify in docker-compose.yml:
+# volumes:
+#   - ./data/graphdb:/opt/graphdb/home
+```
+
 ### Health Check
 
 The container includes a health check script (`healthy.sh`) that verifies GraphDB is running:
@@ -247,6 +306,82 @@ REPOLABEL=${REPOLABEL:-"KGAP repo for ${REPONAME}"}
 ```
 
 ### healthy.sh
+
+Verifies GraphDB is responding to requests by checking the health endpoint.
+
+## Troubleshooting
+
+### Container Won't Start
+
+**Symptom**: Container exits immediately with exit code 1
+
+**Solutions**:
+1. Check logs: `docker compose logs graphdb`
+2. Verify disk space: `df -h`
+3. Check Java options for syntax errors: `echo $GDB_JAVA_OPTS`
+4. Verify `.env` file exists: `cat .env`
+
+### Out of Memory
+
+**Symptom**: Container crashes with "java.lang.OutOfMemoryError"
+
+**Solution**:
+```bash
+# Increase heap size in .env
+GDB_JAVA_OPTS="-Xms16g -Xmx32g"
+
+# Restart GraphDB
+docker compose down
+docker compose up -d graphdb
+```
+
+### Slow Queries
+
+**Symptom**: SPARQL queries take minutes to execute
+
+**Solutions**:
+1. Add indexes to frequently queried properties
+2. Increase Java heap: `GDB_JAVA_OPTS="-Xms16g -Xmx32g"`
+3. Check repository statistics: http://localhost:7200 → Your Repository → Queries
+4. Review query execution plan in Workbench
+
+### Connection Refused
+
+**Symptom**: Cannot connect to http://localhost:7200
+
+**Solutions**:
+```bash
+# Verify container is running
+docker compose ps graphdb
+
+# Check if port is available
+lsof -i :7200
+
+# Verify network connectivity
+docker compose exec graphdb curl http://localhost:7200/healthy
+```
+
+## Environment Variables Reference
+
+### Complete Table
+
+| Variable | Default | Min | Max | Description |
+|----------|---------|-----|-----|-------------|
+| `GDB_REPO` | `kgap` | N/A | N/A | Repository identifier (alphanumeric, no spaces) |
+| `REPOLABEL` | `label_repo_here` | N/A | N/A | Human-readable repository name |
+| `GDB_HOME_FOLDER` | `/opt/graphdb/home` | N/A | N/A | Directory for repository storage |
+| `GDB_MAX_HEADER` | `65536` | `8192` | `262144` | Max HTTP header size in bytes |
+| `GDB_JAVA_OPTS` | `-Xms8g -Xmx16g ...` | N/A | N/A | Java runtime options |
+
+### Java Options (`GDB_JAVA_OPTS`) Components
+
+| Option | Purpose | Example |
+|--------|---------|----------|
+| `-Xms` | Initial heap size | `-Xms8g` (8GB) |
+| `-Xmx` | Maximum heap size | `-Xmx16g` (16GB) |
+| `-Dcom.ontotext.graphdb.monitoring.jmx=true` | Enable JMX monitoring | Needed for monitoring tools |
+| `-XX:+UseG1GC` | Use G1 garbage collector | Better for large heaps (>12GB) |
+| `-XX:+PerfDisableSharedMem` | Disable shared memory perf | Helps in Kubernetes/containerized environments |
 
 Simple health check that verifies GraphDB is responding:
 

@@ -9,34 +9,69 @@ The K-GAP documentation is structured to be published on GitHub Pages, making it
 https://vliz-be-opsci.github.io/k-gap/
 ```
 
+The documentation is **automatically built and deployed** using a GitHub Actions workflow whenever changes are pushed to the `main` branch.
+
 ## Setup Instructions
 
 ### 1. Enable GitHub Pages
 
 1. Go to the repository on GitHub: https://github.com/vliz-be-opsci/k-gap
 2. Navigate to **Settings** → **Pages**
-3. Under **Source**, select:
-   - **Branch**: `main` (or your default branch)
-   - **Folder**: `/docs`
-4. Click **Save**
+3. Under **Build and deployment**, select:
+   - **Source**: `GitHub Actions`
+   - (The workflow is configured to deploy automatically)
+4. Optionally configure a custom domain under **Custom domain**
 
-### 2. Wait for Deployment
+### 2. Automatic Deployment
 
-GitHub will automatically build and deploy the documentation. This usually takes 1-2 minutes.
+The documentation is automatically built and deployed by the `Deploy Documentation` GitHub Actions workflow (`.github/workflows/deploy-docs.yml`) whenever:
+- Changes are pushed to the `main` branch
+- The `docs/` directory is modified
+- The workflow file is updated
+- Workflow is run manually via "Run workflow" button
 
-You can monitor the deployment:
-1. Go to the **Actions** tab
-2. Look for "pages build and deployment" workflow
-3. Wait for it to complete (green checkmark)
+**Monitor deployment**:
+1. Go to the **Actions** tab in the repository
+2. Look for the "Deploy Documentation" workflow
+3. Wait for it to complete (green checkmark = success)
 
-### 3. Access the Documentation
+### 3. Manual Deployment
 
-Once deployed, the documentation will be available at:
+To manually trigger a deployment:
+1. Go to **Actions** tab
+2. Select **Deploy Documentation** workflow on the left
+3. Click **Run workflow** → **Branch: main** → **Run workflow**
+
+### 4. Access the Documentation
+
+Once deployed (1-2 minutes), the documentation will be available at:
 ```
 https://vliz-be-opsci.github.io/k-gap/
 ```
 
-Or with a custom domain if configured.
+## Local Testing
+
+To test the documentation locally before deploying:
+
+```bash
+# Install MyST CLI (if not already installed)
+npm install -g mystmd
+
+# Build documentation
+cd docs
+myst build --html
+
+# Serve locally (from docs/_build/html)
+python -m http.server --directory _build/html 8000
+
+# Visit http://localhost:8000/
+```
+
+Then make changes to markdown files, rebuild with `myst build --html`, and refresh the browser to see them.
+
+## MyST Configuration
+
+The documentation is built using MyST Markdown. Check `docs/myst.yml` for build configuration if it exists, or MyST will use sensible defaults.
 
 ## Documentation Structure
 
@@ -44,8 +79,15 @@ The documentation is organized as follows:
 
 ```
 docs/
-├── _config.yml              # Jekyll configuration
+├── _config.yml              # Jekyll configuration (not used with MyST)
+├── myst.yml                 # MyST configuration (optional)
 ├── index.md                 # Main documentation page
+├── workflow.md              # Workflow guide
+├── configuration-guide.md   # Configuration reference
+├── quick-reference.md       # Quick commands reference
+├── advanced-topics.md       # Advanced patterns
+├── faq.md                   # Frequently asked questions
+├── GITHUB_PAGES.md          # This file
 └── components/              # Component-specific documentation
     ├── graphdb.md          # GraphDB component
     ├── jupyter.md          # Jupyter component
@@ -55,34 +97,32 @@ docs/
 
 ## Theme and Styling
 
-The documentation uses the **Just the Docs** theme to provide a book-style experience:
-- Left sidebar navigation with ordered chapters
+The documentation uses MyST Markdown with a standard clean theme, providing:
+- Left sidebar navigation (auto-generated from page structure)
 - Built-in search across pages
 - Responsive layout (mobile-friendly)
 - Syntax highlighting for code blocks
-
-Configuration is in `docs/_config.yml`:
-```yaml
-remote_theme: just-the-docs/just-the-docs
-title: K-GAP Documentation
-description: Knowledge Graph Analysis Platform - Comprehensive Documentation
-show_downloads: false
-search_enabled: true
-```
+- Support for complex markdown and interactive content
 
 ## Customization
 
-### Changing the Theme
+### MyST Configuration
 
-Edit `docs/_config.yml` and change the theme:
+Create or edit `docs/myst.yml` to customize the build process:
+
 ```yaml
-theme: jekyll-theme-minimal
-# or
-theme: jekyll-theme-slate
-# or other supported themes
+version: 1.1
+project:
+  title: K-GAP Documentation
+  description: Knowledge Graph Analysis Platform
+execution:
+  execute: false  # Don't execute code cells
+html:
+  # HTML-specific settings
+  canonical_url: https://vliz-be-opsci.github.io/k-gap/
 ```
 
-See [GitHub Pages themes](https://pages.github.com/themes/) for available options.
+For available options, see [MyST Documentation](https://mystmd.org/guide/configuration).
 
 ### Custom Domain
 
@@ -98,26 +138,7 @@ To use a custom domain:
    CNAME docs.k-gap -> vliz-be-opsci.github.io
    ```
 
-3. In GitHub repository settings, enter your custom domain under **Pages** → **Custom domain**
-
-### Adding a Custom Layout
-
-Create `docs/_layouts/default.html` to customize the page layout:
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>{{ page.title }} - {{ site.title }}</title>
-  <!-- Custom styles -->
-</head>
-<body>
-  {{ content }}
-</body>
-</html>
-```
-
-## Local Preview
+3. In GitHub repository settings, enter your custom domain under **Settings** → **Pages** → **Custom domain**
 
 To preview the documentation locally before publishing:
 

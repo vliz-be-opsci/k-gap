@@ -12,6 +12,7 @@ K-GAP is a microservices-based platform for building, managing, and analyzing kn
 ## Quick Navigation
 
 - **[Workflow Guide](./workflow.md)** - Step-by-step book-style workflow
+- **[Configuration Guide](./configuration-guide.md)** - Complete environment and config reference
 - **[Quick Reference](./quick-reference.md)** - Common commands and patterns
 - **[FAQ](./faq.md)** - Frequently asked questions
 - **[Advanced Topics](./advanced-topics.md)** - Advanced usage patterns
@@ -23,10 +24,11 @@ Follow this documentation in order as a user guide:
 
 1. **[Getting Started & Platform Overview](./index.md)** - Understand architecture and deploy K-GAP
 2. **[Workflow Guide](./workflow.md)** - Execute the end-to-end K-GAP workflow step by step
-3. **[Component Guides](./components/graphdb.md)** - Deep-dive into each service
-4. **[Quick Reference](./quick-reference.md)** - Copy/paste commands for daily use
-5. **[Advanced Topics](./advanced-topics.md)** - Optimization and advanced patterns
-6. **[FAQ](./faq.md)** - Troubleshooting and common questions
+3. **[Configuration Guide](./configuration-guide.md)** - Complete environment variables and config reference
+4. **[Component Guides](./components/graphdb.md)** - Deep-dive into each service
+5. **[Quick Reference](./quick-reference.md)** - Copy/paste commands for daily use
+6. **[Advanced Topics](./advanced-topics.md)** - Optimization and advanced patterns
+7. **[FAQ](./faq.md)** - Troubleshooting and common questions
 
 ## Table of Contents
 

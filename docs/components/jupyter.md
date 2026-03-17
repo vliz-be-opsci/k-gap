@@ -138,9 +138,10 @@ Navigate to http://localhost:8889 in your browser. No password/token is required
 #### 1. Querying GraphDB
 
 ```python
-from kgap_tools import execute_to_df, GDB
+from kgap_tools import execute_to_df, GDB, generate_sparql
+import pandas as pd
 
-# Method 1: Using template queries
+# Method 1: Using template queries (files in ./queries/ folder)
 df = execute_to_df('my_query_template', param1='value', param2=123)
 display(df)
 
@@ -148,6 +149,219 @@ display(df)
 from pykg2tbl import KGSource
 
 sparql = """
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?subject ?object (COUNT(*) as ?count)
+WHERE {
+  ?subject ?predicate ?object .
+  FILTER(?predicate = rdf:type)
+}
+GROUP BY ?subject ?object
+LIMIT 100
+"""
+
+result = GDB.query(sparql=sparql)
+df = result.to_dataframe()
+display(df)
+```
+
+#### 2. Data Analysis and Visualization
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+from kgap_tools import execute_to_df
+
+# Query data
+df = execute_to_df('entity_types_count')
+
+# Display statistics
+print(f"Total entities: {len(df)}")
+print(f"Average count: {df['count'].mean()}")
+
+# Create visualization
+plt.figure(figsize=(12, 6))
+plt.barh(df['type'][:20], df['count'][:20])
+plt.xlabel('Count')
+plt.title('Top 20 Entity Types')
+plt.tight_layout()
+plt.show()
+```
+
+#### 3. Batch SPARQL Processing
+
+```python
+from kgap_tools import generate_sparql, GDB
+import pandas as pd
+
+# Process multiple queries
+queries = {
+    'entities': 'entity-list',
+    'properties': 'property-count',
+    'classes': 'class-hierarchy'
+}
+
+results = {}
+for key, template in queries.items():
+    try:
+        results[key] = execute_to_df(template)
+        print(f"✓ {key}: {len(results[key])} rows")
+    except Exception as e:
+        print(f"✗ {key}: {e}")
+        results[key] = pd.DataFrame()
+
+# Combine and export
+for key, df in results.items():
+    df.to_csv(f"/data/{key}.csv", index=False)
+    print(f"Exported {key} to /data/{key}.csv")
+```
+
+#### 4. External SPARQL Endpoint
+
+```python
+from kgap_tools import ExternalEndPoint
+from pykg2tbl import KGSource
+
+# Query external SPARQL endpoint
+external = KGSource.build("https://example.com/sparql")
+
+sparql = """
+SELECT ?label (COUNT(*) as ?count)
+WHERE {
+  ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label
+}
+GROUP BY ?label
+ID BY DESC(?count)
+LIMIT 50
+"""
+
+result = external.query(sparql=sparql)
+df = result.to_dataframe()
+print(df)
+```
+
+#### 5. Configure Query Templates
+
+**Create a query template file** at `./queries/my-template.sparql`:
+
+```sparql
+# File: ./queries/my-template.sparql
+# Get entities of a specific type
+
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?entity ?label
+WHERE {
+  ?entity rdf:type {{TYPE}} ;
+          rdfs:label ?label .
+}
+LIMIT {{LIMIT:100}}
+```
+
+**Use the template in a notebook**:
+
+```python
+from kgap_tools import execute_to_df
+
+# Template variables are replaced with values
+df = execute_to_df(
+    'my-template',
+    TYPE='<http://example.org/MyClass>',
+    LIMIT=50
+)
+print(df)
+```
+
+## Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GDB_BASE` | `http://graphdb:7200/` | Base URL for GraphDB service inside Docker |
+| `GDB_REPO` | `kgap` | Default GraphDB repository name |
+| `NOTEBOOK_ARGS` | `--NotebookApp.token=''` | Disable password/token authentication |
+| `SRC_FOLDER` | `/kgap/notebooks` | Source folder for notebooks (not typically changed) |
+
+### Changing Environment Variables
+
+Modify `.env` file and restart:
+
+```bash
+# Edit .env
+echo "GDB_BASE=http://graphdb-server.example.com:7200/" >> .env
+echo "GDB_REPO=my-custom-repo" >> .env
+
+# Restart Jupyter
+docker compose restart jupyter
+```
+
+## Troubleshooting
+
+### Cannot Access Notebooks
+
+**Symptom**: Browser shows "Connection refused" on port 8889
+
+**Solutions**:
+```bash
+# Check if notebook is running
+docker compose ps jupyter
+
+# Check logs
+docker compose logs jupyter
+
+# Restart
+docker compose restart jupyter
+```
+
+### Modules Not Found
+
+**Symptom**: `ModuleNotFoundError: No module named 'pykg2tbl'` or similar
+
+**Solution**:
+```bash
+# Install additional packages in notebook
+!pip install pykg2tbl
+
+# Or add to jupyter/kgap/requirements.txt and rebuild
+echo "rdflib" >> jupyter/kgap/requirements.txt
+docker compose build jupyter
+docker compose up -d jupyter
+```
+
+### GraphDB Connection Fails
+
+**Symptom**: `ConnectionError` when querying GraphDB
+
+**Check**:
+```python
+import os
+print(f"GDB_BASE: {os.getenv('GDB_BASE')}")
+print(f"GDB_REPO: {os.getenv('GDB_REPO')}")
+
+from kgap_tools import GDB
+print(f"Endpoint: {GDB}")
+```
+
+**Solution**: Verify GraphDB is running: `docker compose logs graphdb`
+
+## File Mounting
+
+The Jupyter container mounts:
+- `./notebooks` → `/notebooks` - Persists notebook files
+- `./data` → `/data` - Access to data files and configurations
+
+Place data files in `./data/` for access in notebooks:
+
+```python
+from pathlib import Path
+
+# List data directory
+for f in Path('/data').glob('*.*'):
+    print(f.name)
+
+# Read data file
+with open('/data/my-file.ttl', 'r') as f:
+    content = f.read()
+```
 SELECT ?s ?p ?o
 WHERE {
     ?s ?p ?o .
