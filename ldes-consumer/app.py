@@ -15,6 +15,7 @@ import logging
 import threading
 from pathlib import Path
 from typing import Dict, List
+from socket import gethostname
 
 import docker
 from docker.errors import DockerException, APIError
@@ -75,48 +76,19 @@ def get_compose_labels(docker_client):
 
 def get_current_container_ref() -> str | None:
     """
-    Identify the current container id/name using runtime introspection.
+    Get the current container's hostname (container ID in Docker).
 
     Returns:
-        Container id/name, or None when not running in a Docker container
+        Container hostname, or None if unable to determine
     """
-    # Try cgroup introspection first (works without env vars).
     try:
-        cgroup_path = Path("/proc/self/cgroup")
-        if cgroup_path.exists():
-            for line in cgroup_path.read_text(
-                encoding="utf-8", errors="ignore"
-            ).splitlines():
-                if not line:
-                    continue
-                value = line.rsplit("/", 1)[-1].strip()
-                if not value:
-                    continue
-
-                # Typical Docker cgroup id forms.
-                if len(value) == 64 and all(
-                    c in "0123456789abcdef" for c in value.lower()
-                ):
-                    return value
-                if value.startswith("docker-") and value.endswith(".scope"):
-                    container_id = value[len("docker-") : -len(".scope")]
-                    if container_id:
-                        return container_id
+        hostname = gethostname()
+        if hostname:
+            return hostname
+        return None
     except Exception as e:
-        logger.debug(f"Could not inspect /proc/self/cgroup: {e}")
-
-    # Fallback to kernel hostname file (still runtime introspection, no env var).
-    try:
-        hostname_file = Path("/etc/hostname")
-        if hostname_file.exists():
-            value = hostname_file.read_text(encoding="utf-8", errors="ignore").strip()
-            if value:
-                return value
-    except Exception as e:
-        logger.debug(f"Could not inspect /etc/hostname: {e}")
-
-    logger.warning("Could not determine current container reference via introspection")
-    return None
+        logger.warning(f"Could not determine current container hostname: {e}")
+        return None
 
 
 def get_parent_network(docker_client):
@@ -257,18 +229,10 @@ def process_feeds(feeds_config, docker_client, ldes2sparql_image):
     host_state_base = get_host_path_from_mounts(docker_client, state_container_base)
 
     if host_state_base is None:
-        # Backward-compatible fallback for non-standard environments.
-        host_pwd = os.getenv("HOST_PWD")
-        if host_pwd:
-            host_state_base = f"{host_pwd.rstrip('/')}/data/ldes-consumer/state"
-            logger.info(
-                f"Falling back to HOST_PWD for state directory base: {host_state_base}"
-            )
-        else:
-            logger.error(
-                "Cannot determine host state path: no matching mount found and HOST_PWD is not set"
-            )
-            return []
+        logger.error(
+            "Cannot determine host state path: no matching mount found and HOST_PWD is not set"
+        )
+        return []
 
     # Get restart policy from environment (default: no, no automatic restart)
     default_restart_policy = os.getenv("RESTART", "no")
