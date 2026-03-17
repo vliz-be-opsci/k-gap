@@ -1,3 +1,9 @@
+---
+title: Sembench Component
+parent: Components
+nav_order: 3
+---
+
 # Sembench Component
 
 The Sembench component is a Python-based semantic processing engine that provides scheduled data processing and transformation capabilities using the [py-sema](https://github.com/vliz-be-opsci/py-sema) library.
@@ -134,9 +140,216 @@ workflows:
         # ... step configuration
 ```
 
-For detailed configuration options, refer to the [py-sema documentation](https://github.com/vliz-be-opsci/py-sema).
+For detailed configuration options, refer to the [py-sema bench module documentation](https://github.com/vliz-be-opsci/py-sema/blob/main/sema/bench/README.md).
 
-### Starting Sembench
+### Configuration Examples
+
+#### Minimal Setup (No Processing)
+
+If you're not using Sembench yet, create an empty configuration:
+
+```yaml
+# data/sembench.yaml
+workflows: []
+```
+
+This allows the container to start without errors.
+
+#### Data Validation Workflow
+
+Validate RDF data for required properties:
+
+```yaml
+# data/sembench.yaml
+workflows:
+  - name: validate-observations
+    schedule: "0 */6 * * *"  # Every 6 hours
+    steps:
+      - type: query
+        sparql_endpoint: http://graphdb:7200/repositories/kgap
+        query: |
+          PREFIX sosa: <http://www.w3.org/ns/sosa/>
+          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+          SELECT ?observation ?issue
+          WHERE {
+            ?observation a sosa:Observation .
+            OPTIONAL { ?observation sosa:hasResult ?result . }
+            OPTIONAL { ?observation sosa:madeBySensor ?sensor . }
+            BIND(IF(!BOUND(?result), "Missing hasResult", 
+                     IF(!BOUND(?sensor), "Missing madeBySensor", NULL)) as ?issue)
+          }
+        output: /data/validation-issues.csv
+      
+      - type: report
+        format: json
+        template: |
+          {
+            "timestamp": "${NOW}",
+            "validation_results": "${QUERY_RESULTS}"
+          }
+```
+
+#### Data Enrichment Workflow
+
+Enrich entities with additional properties:
+
+```yaml
+# data/sembench.yaml
+workflows:
+  - name: enrich-entities
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    steps:
+      - type: extract
+        sparql_endpoint: http://graphdb:7200/repositories/kgap
+        query: |
+          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+          SELECT ?entity ?label
+          WHERE {
+            ?entity rdfs:label ?label .
+            FILTER(STRLEN(STR(?label)) < 50)
+          }
+          LIMIT 1000
+        output: /data/entities-to-enrich.json
+      
+      - type: transform
+        input: /data/entities-to-enrich.json
+        script: /data/enrichment-script.py
+        output: /data/enriched-entities.json
+      
+      - type: load
+        input: /data/enriched-entities.json
+        sparql_endpoint: http://graphdb:7200/repositories/kgap
+        graph: urn:kgap:enrichment
+```
+
+#### Dataset Statistics Workflow
+
+Regularly calculate and report dataset statistics:
+
+```yaml
+# data/sembench.yaml
+workflows:
+  - name: dataset-statistics
+    schedule: "0 1 * * 0"  # Weekly on Sunday at 1 AM
+    steps:
+      - type: query
+        sparql_endpoint: http://graphdb:7200/repositories/kgap
+        queries:
+          - name: triple-count
+            query: "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o . }"
+          
+          - name: entity-count
+            query: "SELECT (COUNT(DISTINCT ?s) as ?count) WHERE { ?s ?p ?o . }"
+          
+          - name: type-distribution
+            query: |
+              PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+              SELECT ?type (COUNT(?s) as ?count)
+              WHERE { ?s rdf:type ?type . }
+              GROUP BY ?type
+              ORDER BY DESC(?count)
+        
+        output: /data/stats-${TIMESTAMP}.json
+```
+
+### Using Environment Variables in Configuration
+
+```yaml
+# data/sembench.yaml
+workflows:
+  - name: configurable-workflow
+    steps:
+      - type: query
+        # Use environment variables for flexibility
+        sparql_endpoint: ${SPARQL_ENDPOINT:-http://graphdb:7200/repositories/kgap}
+        output: ${SEMBENCH_OUTPUT_PATH}/results.json
+```
+
+Then in `.env`:
+
+```bash
+SPARQL_ENDPOINT=http://graphdb:7200/repositories/custom-repo
+SEMBENCH_OUTPUT_PATH=/data/output
+```
+
+## Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEMBENCH_INPUT_PATH` | `/data` | Input data directory for workflows |
+| `SEMBENCH_OUTPUT_PATH` | `/data` | Output directory for processed data |
+| `SEMBENCH_HOME_PATH` | `/data` | Home directory for Sembench runtime files |
+| `SEMBENCH_CONFIG_PATH` | `/data/sembench.yaml` | Path to configuration file |
+| `SCHEDULER_INTERVAL_SECONDS` | `86400` | How often to check for scheduled tasks (seconds) |
+
+### Setting Execution Interval
+
+```bash
+# Check for scheduled tasks every hour
+echo "SCHEDULER_INTERVAL_SECONDS=3600" >> .env
+
+# Or every 10 minutes (for testing)
+echo "SCHEDULER_INTERVAL_SECONDS=600" >> .env
+
+# Restart Sembench
+docker compose restart sembench
+```
+
+## Monitoring Execution
+
+### View Sembench Logs
+
+```bash
+# Stream live logs
+docker compose logs -f sembench
+
+# View last 100 lines
+docker compose logs sembench -n 100
+
+# Save logs to file
+docker compose logs sembench > sembench.log
+```
+
+### Check Workflow Status
+
+```bash
+# List processed output files
+ls -lh ./data/
+
+# Check timestamps of output files
+stat ./data/stats-*.json
+```
+
+### Troubleshooting
+
+```bash
+# Verify configuration file exists
+test -f ./data/sembench.yaml && echo "Config found" || echo "Config missing"
+
+# Check if SEMBENCH_CONFIG_PATH is set
+docker compose exec sembench env | grep SEMBENCH_CONFIG_PATH
+
+# Manually trigger calculation (stop and restart)
+docker compose restart sembench
+```
+
+## Disabling Sembench
+
+If you don't need Sembench, create an empty configuration:
+
+```bash
+echo "workflows: []" > ./data/sembench.yaml
+docker compose restart sembench
+```
+
+Or comment it out in `docker-compose.yml`:
+
+```yaml
+  # sembench:
+  #   ...
+```
+
+## Starting Sembench
 
 Sembench starts automatically when the container launches and runs in a continuous loop:
 

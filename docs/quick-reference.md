@@ -1,3 +1,8 @@
+---
+title: Quick Reference
+nav_order: 4
+---
+
 # K-GAP Quick Reference
 
 Quick reference guide for common K-GAP operations.
@@ -71,31 +76,105 @@ docker compose up -d --build
 
 ### Environment Variables (.env)
 
+#### Minimal Development Setup
+
 ```bash
-# Docker Compose
+# Copy and start
+cp dotenv-example .env
+echo "LOG_LEVEL=DEBUG" >> .env
+echo "GDB_JAVA_OPTS=\"-Xms2g -Xmx4g\"" >> .env
+```
+
+#### Standard Production Setup
+
+```bash
 COMPOSE_PROJECT_NAME=kgap
-
-# GraphDB
+LOG_LEVEL=INFO
 GDB_REPO=kgap
-GDB_JAVA_OPTS="-Xms8g -Xmx16g"
-
-# Sembench
+REPOLABEL=K-GAP Production
+GDB_HOME_FOLDER=/data/graphdb
+GDB_MAX_HEADER=65536
+GDB_JAVA_OPTS="-Xms8g -Xmx16g -Dcom.ontotext.graphdb.monitoring.jmx=true"
 SEMBENCH_CONFIG_PATH=/data/sembench.yaml
 SCHEDULER_INTERVAL_SECONDS=86400
-
-# LDES Consumer
 LDES_CONFIG_FILE=/data/ldes-feeds.yaml
-LOG_LEVEL=INFO
+LDES_LOG_LEVEL=INFO
 ```
+
+#### High-Performance Setup
+
+```bash
+# For large knowledge graphs (64GB+ systems)
+GDB_HOME_FOLDER=/data/graphdb
+GDB_JAVA_OPTS="-Xms32g -Xmx64g -Dcom.ontotext.graphdb.monitoring.jmx=true -XX:+UseG1GC"
+LOG_LEVEL=WARNING
+SCHEDULER_INTERVAL_SECONDS=86400
+```
+
+### Complete Environment Reference
+
+For complete documentation, see [Configuration Guide](./configuration-guide.md).
+
+| Component | Variable | Default | Common Values |
+|-----------|----------|---------|---------------|
+| Compose | `COMPOSE_PROJECT_NAME` | `kgap` | `kgap`, `kgap-prod`, `kgap-dev` |
+| Compose | `BUILD_TAG` | `latest` | `latest`, `v1.0.0`, `main` |
+| Logging | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| **GraphDB** | `GDB_REPO` | `kgap` | Any alphanumeric string |
+| GraphDB | `REPOLABEL` | (empty) | Description of repository |
+| GraphDB | `GDB_HOME_FOLDER` | `/opt/graphdb/home` | `/data/graphdb` (for persistence) |
+| GraphDB | `GDB_MAX_HEADER` | `65536` | `65536` (dev), `131072` (prod) |
+| GraphDB | `GDB_JAVA_OPTS` | `-Xms8g...` | See [Configuration Guide](./configuration-guide.md#graphdb-configuration) |
+| **Jupyter** | `GDB_BASE` | `http://graphdb:7200/` | `http://hostname:7200/` |
+| Jupyter | `NOTEBOOK_ARGS` | `--NotebookApp.token=''` | Usually unchanged |
+| **Sembench** | `SEMBENCH_CONFIG_PATH` | `/data/sembench.yaml` | Path to config file |
+| Sembench | `SCHEMA_INTERVAL_SECONDS` | `86400` | `86400` (daily), `3600` (hourly) |
+| **LDES** | `LDES_CONFIG_FILE` | `/data/ldes-feeds.yaml` | Path to config file |
+| LDES | `LDES_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` |
+| LDES | `LDES2SPARQL_IMAGE` | `ghcr.io/...` | Usually unchanged |
 
 ### LDES Feeds (data/ldes-feeds.yaml)
 
 ```yaml
 feeds:
-  - name: my-feed
+  # Minimal feed
+  my-feed:
     url: https://example.com/ldes
+
+  # Full feed example
+  advanced-feed:
+    url: https://example.org/ldes/data
     sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
-    polling_interval: 60
+    target_graph: urn:kgap:my-feed
+    environment:
+      POLLING_FREQUENCY: 300000      # Every 5 minutes (milliseconds)
+      MATERIALIZE: "false"
+      RESTART: "unless-stopped"
+      MEMBER_BATCH_SIZE: "5000"
+```
+
+**Polling Frequencies**:
+- `60000` = 1 minute (real-time feeds)
+- `300000` = 5 minutes (active feeds)
+- `600000` = 10 minutes (default)
+- `3600000` = 1 hour (bulk data)
+
+### Setup Prebuild Profiles
+
+Quickly set up common deployments:
+
+```bash
+# Development
+cp dotenv-example .env
+echo "GDB_JAVA_OPTS=\"-Xms2g -Xmx4g\"" >> .env
+echo "LOG_LEVEL=DEBUG" >> .env
+echo "SCHEDULER_INTERVAL_SECONDS=3600" >> .env
+
+# Production (persistence + monitoring)
+cp dotenv-example .env
+echo "GDB_HOME_FOLDER=/data/graphdb" >> .env
+echo "GDB_JAVA_OPTS=\"-Xms16g -Xmx32g -Dcom.ontotext.graphdb.monitoring.jmx=true\"" >> .env
+echo "LOG_LEVEL=WARNING" >> .env
 ```
 
 ## SPARQL Queries

@@ -10,6 +10,7 @@ A microservices-based platform for building, managing, and analyzing knowledge g
 
 Comprehensive documentation is available in the `docs/` directory:
 - [Getting Started Guide](docs/index.md#getting-started)
+- [Step-by-Step Workflow Guide](docs/workflow.md)
 - [Architecture Overview](docs/index.md#architecture)
 - [Configuration Guide](docs/index.md#configuration)
 - [Component Documentation](docs/index.md#components)

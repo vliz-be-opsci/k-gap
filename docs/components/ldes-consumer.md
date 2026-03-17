@@ -1,3 +1,9 @@
+---
+title: LDES Consumer Component
+parent: Components
+nav_order: 4
+---
+
 # LDES Consumer Component
 
 The LDES Consumer is a multi-feed harvesting service that wraps [ldes2sparql](https://github.com/maregraph-eu/ldes2sparql) to automatically ingest data from multiple Linked Data Event Streams (LDES) into GraphDB.
@@ -189,6 +195,247 @@ feeds:
     environment:
       POLLING_FREQUENCY: 3600000  # Poll every hour
 ```
+
+#### Local Development Setup
+
+For local testing with static LDES sources:
+
+```yaml
+feeds:
+  test-feed-local:
+    url: file:///data/test-ldes.ttl
+    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+    environment:
+      POLLING_FREQUENCY: 60000  # Poll every minute
+      MATERIALIZE: "true"
+      RESTART: "no"
+```
+
+#### Production Setup with Monitoring
+
+For production environments with proper resource controls:
+
+```yaml
+feeds:
+  production-feed-1:
+    url: https://prod.example.org/ldes/data
+    sparql_endpoint: http://graphdb:7200/repositories/production/statements
+    target_graph: urn:kgap:prod:feed1
+    environment:
+      POLLING_FREQUENCY: 600000  # Poll every 10 minutes
+      MATERIALIZE: "false"
+      RESTART: "unless-stopped"
+      MEMBER_BATCH_SIZE: "5000"
+  
+  production-feed-2:
+    url: https://prod.example.org/ldes/metrics
+    sparql_endpoint: http://graphdb:7200/repositories/production/statements
+    target_graph: urn:kgap:prod:feed2
+    environment:
+      POLLING_FREQUENCY: 1800000  # Poll every 30 minutes
+      MATERIALIZE: "true"
+      RESTART: "unless-stopped"
+      REMOVE: "false"
+```
+
+#### Multi-Source Configuration
+
+Harvesting from multiple heterogeneous sources:
+
+```yaml
+feeds:
+  # NERC vocabularies
+  bodc-p02:
+    url: http://vocab.nerc.ac.uk/ldes/P02/
+    environment:
+      POLLING_FREQUENCY: 300000
+      MATERIALIZE: "false"
+  
+  # Marine term translations
+  mtt-p02-nl:
+    url: https://marine-term-translations.github.io/P02-NL/LDES/latest.ttl
+    environment:
+      POLLING_FREQUENCY: 600000
+      MATERIALIZE: "true"
+      SHAPE: "/data/mtt-bodc-shape.ttl"
+  
+  # Custom proprietary source
+  internal-data:
+    url: https://internal-api.example.org/sparql
+    sparql_endpoint: http://graphdb:7200/repositories/kgap/statements
+    target_graph: urn:kgap:internal
+    environment:
+      POLLING_FREQUENCY: 1800000  # 30 minutes
+      RESTART: "on-failure"
+```
+
+### Configuration Migration Guide
+
+If migrating from older configurations:
+
+**Old format**:
+```yaml
+feeds:
+  - name: my-feed
+    url: http://example.com/ldes
+    polling_interval: 60
+```
+
+**New format**:
+```yaml
+feeds:
+  my-feed:
+    url: http://example.com/ldes
+    environment:
+      POLLING_FREQUENCY: 60000  # in milliseconds, not seconds!
+```
+
+## Monitoring and Logging
+
+### View LDES Consumer Logs
+
+```bash
+# Main consumer logs
+docker compose logs -f ldes-consumer
+
+# View logs for specific feed
+docker logs -f ldes-consumer-feed-name
+
+# Save logs to file
+docker compose logs ldes-consumer > ldes-consumer.log
+```
+
+### Monitor Feed Containers
+
+```bash
+# List all LDES feed containers
+docker ps --filter label=com.docker.compose.service~=ldes-consumer
+
+# Check status of specific feed
+docker inspect ldes-consumer-{feed-name} --format='{{.State}}'
+
+# Stream live container logs
+docker logs -f ldes-consumer-{feed-name}
+```
+
+### Check Ingestion Progress
+
+Query GraphDB to see ingested data:
+
+```sparql
+# Count triples ingested from all feeds
+SELECT (COUNT(*) as ?total_triples)
+WHERE { ?s ?p ?o . }
+
+# Count triples per named graph (per feed)
+SELECT ?graph (COUNT(*) as ?count)
+WHERE { 
+  GRAPH ?graph { ?s ?p ?o . }
+}
+GROUP BY ?graph
+ORDER BY DESC(?count)
+
+# Latest ingestion timestamp
+SELECT MAX(?timestamp) as ?latest_update
+WHERE {
+  ?s <http://purl.org/pav/lastUpdatedOn> ?timestamp .
+}
+```
+
+## Troubleshooting
+
+### Feed Container Keeps Crashing
+
+**Symptom**: `docker logs ldes-consumer-{feed-name}` shows repeated errors
+
+**Solutions**:
+1. Check feed URL is accessible: `curl -I https://example.org/ldes`
+2. Verify GraphDB endpoint is reachable:
+   ```bash
+   docker compose exec ldes-consumer curl http://graphdb:7200/repositories/kgap
+   ```
+3. Check POLLING_FREQUENCY value (must be in milliseconds, not seconds)
+4. Review feed format (must be valid LDES/RDF)
+
+### No Data Being Ingested
+
+**Symptom**: Feed containers running but no new data in GraphDB
+
+**Debugging**:
+```bash
+# Check container status
+docker ps --filter name=ldes-consumer
+
+# View container logs
+docker logs ldes-consumer-{feed-name} --tail 100
+
+# Verify state directory was created
+ls -la ./data/ldes-consumer/state/{feed-name}/
+
+# Check if SPARQL endpoint is accepting writes
+curl -X POST http://localhost:7200/repositories/kgap/statements \
+  -H "Content-Type: text/turtle" \
+  -d '@example.ttl'
+```
+
+### Containers Not Connecting to Network
+
+**Symptom**: Feed containers exist but can't reach GraphDB
+
+**Solution**:
+1. Verify Docker network exists:
+   ```bash
+   docker network ls | grep kgap
+   ```
+
+2. Check DOCKER_NETWORK in `.env`:
+   ```bash
+   DOCKER_NETWORK=kgap_default  # Should match your compose project
+   ```
+
+3. Restart LDES Consumer:
+   ```bash
+   docker compose down ldes-consumer
+   docker compose up -d ldes-consumer
+   ```
+
+### Memory or CPU Issues
+
+**Symptom**: Feed containers using excessive resources
+
+**Solutions**:
+1. Reduce MEMBER_BATCH_SIZE:
+   ```yaml
+   environment:
+     MEMBER_BATCH_SIZE: "500"  # Smaller batches
+   ```
+
+2. Increase polling frequency (poll less often):
+   ```yaml
+   environment:
+     POLLING_FREQUENCY: 3600000  # Once per hour instead of every 5 min
+   ```
+
+3. Disable MATERIALIZE if not needed:
+   ```yaml
+   environment:
+     MATERIALIZE: "false"
+   ```
+
+## Best Practices
+
+1. **Start with slow polling**: Begin with longer polling intervals (10+ minutes), then optimize based on data update frequency
+
+2. **Use appropriate restart policies**:
+   - `unless-stopped`: For production feeds (restart if container crashes)
+   - `on-failure`: For important feeds with retry logic
+   - `no`: For experimental/development feeds
+
+3. **Monitor named graphs**: Use target_graph to separate different data sources
+
+4. **Test configuration before production**: Verify feed URL is accessible and returns valid RDF
+
+5. **Archive logs**: Periodically save and archive feed logs for auditing
 
 ## File Structure
 

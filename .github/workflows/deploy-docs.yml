@@ -1,0 +1,68 @@
+name: Deploy Documentation
+
+# Run this when the main branch changes
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    # Only trigger if docs or config changes
+    paths:
+      - 'docs/**'
+      - '.github/workflows/deploy-docs.yml'
+
+env:
+  # Base URL for GitHub Pages
+  BASE_URL: /${{ github.event.repository.name }}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # Build the documentation
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up Node.js for MyST
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+
+      # Install MyST CLI
+      - name: Install MyST Markdown
+        run: npm install -g mystmd
+
+      # Build HTML with MyST
+      - name: Build documentation
+        run: |
+          cd docs
+          myst build --html
+
+      # Upload the built site as artifact
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs/_build/html'
+
+  # Deploy the built documentation to GitHub Pages
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

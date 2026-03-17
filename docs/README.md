@@ -9,6 +9,7 @@ This documentation is organized to help you get started quickly and find detaile
 ### Getting Started
 
 - **[Main Documentation (index.md)](./index.md)** - Start here for an overview, architecture, and getting started guide
+- **[Workflow Guide](./workflow.md)** - Book-style step-by-step workflow chapter
 - **[Quick Reference](./quick-reference.md)** - Quick commands and common patterns
 - **[FAQ](./faq.md)** - Answers to frequently asked questions
 
