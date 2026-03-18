@@ -1,0 +1,93 @@
+# K-GAP stack with Oxigraph as the triple store
+#
+# Usage:
+#   docker compose -f docker-compose.oxigraph.yml up -d
+#
+# Oxigraph is a lightweight, high-performance RDF store written in Rust.
+# It is a single-store server — no named repositories within one instance.
+# Use named graphs to organise project data.
+#
+# SPARQL endpoints (after startup):
+#   Query:  http://localhost:7878/query
+#   Update: http://localhost:7878/update
+#   Graph Store Protocol: http://localhost:7878/store
+#
+# Official docs: https://github.com/oxigraph/oxigraph
+#
+name: ${COMPOSE_PROJECT_NAME:-kgap}
+# -----------------------------------------------------------------------
+services:
+  yasgui:
+    image: redpencil/yasgui:latest
+    container_name: test_kgap_yasgui
+    environment:
+      DEFAULT_SPARQL_ENDPOINT: "http://localhost:7878/query"
+    ports:
+      - "8080:80"
+
+  oxigraph:
+    build:
+      context: ./oxigraph
+    image: ${REG_NS:-kgap}/kgap_oxigraph:${BUILD_TAG:-latest}
+    container_name: test_kgap_oxigraph
+    ports:
+      - "7878:7878"     # HTTP (query, update, graph store)
+    volumes:
+      - ./data/oxigraph:/data
+    # For heavy-load scenarios, increase start-period:
+    # healthcheck:
+    #   start_period: 10s
+    #   interval: 5s
+    #   timeout: 3s
+    #   retries: 3
+
+  jupyter:
+    build:
+      context: ./jupyter
+    image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
+    container_name: test_kgap_jupyter
+    ports:
+      - "8889:8888"
+    links:
+      - oxigraph
+    volumes:
+      - "./notebooks:/notebooks"
+      - "./data:/data"
+    env_file:
+      - ./.env
+    environment:
+      GDB_BASE: "http://oxigraph:7878/"
+      NOTEBOOK_ARGS: "--NotebookApp.token=''"
+    depends_on:
+      oxigraph:
+        condition: service_healthy
+
+  sembench:
+    build:
+      context: ./sembench
+    image: ${REG_NS:-kgap}/kgap_sembench:${BUILD_TAG:-latest}
+    container_name: test_kgap_sembench
+    volumes:
+      - "./data:/data"
+    env_file:
+      - ./.env
+    depends_on:
+      oxigraph:
+        condition: service_healthy
+
+  ldes-consumer:
+    build:
+      context: ./ldes-consumer
+    image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}
+    container_name: test_kgap_ldes_consumer
+    volumes:
+      - "./data:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    env_file:
+      - ./.env
+    environment:
+      DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-kgap}_default
+      DEFAULT_SPARQL_ENDPOINT: "http://oxigraph:7878/update"
+    depends_on:
+      oxigraph:
+        condition: service_healthy

@@ -1,0 +1,99 @@
+# K-GAP stack with Apache Jena Fuseki as the triple store
+#
+# Usage:
+#   docker compose -f docker-compose.fuseki.yml up -d
+#
+# Apache Jena Fuseki is a SPARQL server supporting SPARQL 1.1 Query,
+# Update, and the SPARQL Graph Store HTTP Protocol. Datasets are
+# persistent TDB2 stores created automatically on startup.
+#
+# SPARQL endpoints (after startup, where FUSEKI_DATASET=kgap):
+#   Query:  http://localhost:3030/kgap/sparql
+#   Update: http://localhost:3030/kgap/update
+#   Admin:  http://localhost:3030/$/
+#
+# Official docs: https://jena.apache.org/documentation/fuseki2/fuseki-docker.html
+#
+name: ${COMPOSE_PROJECT_NAME:-kgap}
+# -----------------------------------------------------------------------
+services:
+  yasgui:
+    image: redpencil/yasgui:latest
+    container_name: test_kgap_yasgui
+    environment:
+      DEFAULT_SPARQL_ENDPOINT: "http://localhost:3030/${FUSEKI_DATASET:-kgap}/sparql"
+    ports:
+      - "8080:80"
+
+  fuseki:
+    build:
+      context: ./fuseki
+    image: ${REG_NS:-kgap}/kgap_fuseki:${BUILD_TAG:-latest}
+    container_name: test_kgap_fuseki
+    env_file:
+      - ./.env
+    environment:
+      FUSEKI_DATASET: ${FUSEKI_DATASET:-kgap}
+      # Admin password for the Fuseki web console (http://localhost:3030)
+      ADMIN_PASSWORD: ${FUSEKI_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3030:3030"     # HTTP (SPARQL + admin UI)
+    volumes:
+      - ./data/fuseki:/fuseki/databases
+    # For larger datasets, increase start-period:
+    # healthcheck:
+    #   start_period: 30s
+    #   interval: 5s
+    #   timeout: 3s
+    #   retries: 3
+
+  jupyter:
+    build:
+      context: ./jupyter
+    image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
+    container_name: test_kgap_jupyter
+    ports:
+      - "8889:8888"
+    links:
+      - fuseki
+    volumes:
+      - "./notebooks:/notebooks"
+      - "./data:/data"
+    env_file:
+      - ./.env
+    environment:
+      GDB_BASE: "http://fuseki:3030/"
+      NOTEBOOK_ARGS: "--NotebookApp.token=''"
+    depends_on:
+      fuseki:
+        condition: service_healthy
+
+  sembench:
+    build:
+      context: ./sembench
+    image: ${REG_NS:-kgap}/kgap_sembench:${BUILD_TAG:-latest}
+    container_name: test_kgap_sembench
+    volumes:
+      - "./data:/data"
+    env_file:
+      - ./.env
+    depends_on:
+      fuseki:
+        condition: service_healthy
+
+  ldes-consumer:
+    build:
+      context: ./ldes-consumer
+    image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}
+    container_name: test_kgap_ldes_consumer
+    volumes:
+      - "./data:/data"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    env_file:
+      - ./.env
+    environment:
+      DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-kgap}_default
+      DEFAULT_SPARQL_ENDPOINT: "http://fuseki:3030/${FUSEKI_DATASET:-kgap}/update"
+    depends_on:
+      fuseki:
+        condition: service_healthy

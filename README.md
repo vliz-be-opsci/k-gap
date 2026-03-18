@@ -22,11 +22,19 @@ Comprehensive documentation is available in the `docs/` directory:
 - [Sembench Component](docs/components/sembench.md) - Automated semantic processing
 - [LDES Consumer Component](docs/components/ldes-consumer.md) - Multi-feed LDES harvesting
 
+### Alternative Triple Stores
+
+K-GAP supports swapping GraphDB for other SPARQL-compatible triple stores:
+
+- [Oxigraph](docs/components/oxigraph.md) — lightweight Rust-based RDF store (`docker-compose.oxigraph.yml`)
+- [Apache Jena Fuseki](docs/components/fuseki.md) — Java SPARQL server with named datasets (`docker-compose.fuseki.yml`)
+- [Virtuoso](docs/components/virtuoso.md) — high-performance multi-model database (`docker-compose.virtuoso.yml`)
+
 ## Overview
 
 K-GAP provides a complete, containerized environment for working with knowledge graphs. It combines specialized microservices that work together to:
 
-- **Store and query** RDF data using GraphDB
+- **Store and query** RDF data using GraphDB (or an alternative triple store: Oxigraph, Fuseki, Virtuoso)
 - **Harvest and ingest** data from LDES (Linked Data Event Streams) feeds
 - **Analyze and process** knowledge graphs using Python tools (Sembench)
 - **Explore data** interactively through Jupyter notebooks
