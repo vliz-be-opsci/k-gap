@@ -1,4 +1,4 @@
-FROM apache/jena-fuseki:latest
+FROM apache/jena-fuseki:4.10.0
 
 USER root
 

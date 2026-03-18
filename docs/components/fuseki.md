@@ -18,7 +18,7 @@ Fuseki exposes each dataset as a named endpoint (e.g. `/kgap/sparql`). The K-GAP
 - Persistent TDB2 storage
 - Web admin UI at `/$/`
 
-**Base Image**: [`apache/jena-fuseki`](https://jena.apache.org/documentation/fuseki2/fuseki-docker.html)  
+**Base Image**: [`apache/jena-fuseki:4.10.0`](https://jena.apache.org/documentation/fuseki2/fuseki-docker.html)  
 **Exposed Port**: 3030 (HTTP)  
 **Container Name**: `test_kgap_fuseki` (in test setup)  
 

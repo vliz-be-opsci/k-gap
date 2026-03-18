@@ -17,7 +17,7 @@ Oxigraph is a single-store server — all triples are stored together in one dat
 - Fast startup and low memory footprint
 - No database creation step required (the store is auto-initialised)
 
-**Base Image**: [`ghcr.io/oxigraph/oxigraph`](https://github.com/oxigraph/oxigraph)  
+**Base Image**: [`ghcr.io/oxigraph/oxigraph:v0.4.1`](https://github.com/oxigraph/oxigraph)  
 **Exposed Port**: 7878 (HTTP)  
 **Container Name**: `test_kgap_oxigraph` (in test setup)  
 

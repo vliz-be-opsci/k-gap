@@ -1,4 +1,4 @@
-FROM ghcr.io/oxigraph/oxigraph:latest
+FROM ghcr.io/oxigraph/oxigraph:v0.4.1
 
 # Install curl for the health check script
 # The oxigraph image is based on debian:bookworm-slim
