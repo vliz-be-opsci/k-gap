@@ -70,7 +70,7 @@ cp dotenv-example .env
 mkdir -p ./data ./notebooks
 
 # 4. Start all services
-docker compose up -d
+COMPOSE_PROFILES=ui,notebooks,processing,ingest docker compose up -d
 ```
 
 ### Access Services
@@ -127,6 +127,28 @@ Build with a specific tag:
 
 ```bash
 make BUILD_TAG=0.2.0 docker-build
+```
+
+## Compose Profiles
+
+`docker-compose.yml` defines optional service profiles:
+
+- `ui` for YASGUI
+- `notebooks` for Jupyter
+- `processing` for Sembench
+- `ingest` for LDES Consumer
+
+Examples:
+
+```bash
+# Core services only (no optional profiles)
+docker compose up -d
+
+# Enable selected optional services
+docker compose --profile ui --profile notebooks up -d
+
+# Enable all optional services
+COMPOSE_PROFILES=ui,notebooks,processing,ingest docker compose up -d
 ```
 
 ## Publishing Images

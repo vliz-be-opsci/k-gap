@@ -4,7 +4,9 @@ PROJECT := "kgap"#              - this project
 TIME_TAG := $(shell date +%s)#  - the unix epoch
 BUILD_TAG ?= ${TIME_TAG}#       - provide the BUILD_TAG in the environment, or fallback to time
 REG_NS ?= "kgap"#               - allow the namespace to be overridden to e.g. ghcr.io/vliz-be-opsci/kgap
-DIMGS="graphdb jupyter sembench ldes-consumer"#        - the list of docker images in docker-compose.yml ready to be pushed
+COMPOSE_FILES ?= docker-compose.yml docker-compose.oxigraph.yml# - compose files to include in build matrix
+ALL_PROFILES ?= ui notebooks processing ingest# - profiles from docker-compose.yml that should be included in full builds
+DIMGS="graphdb jupyter sembench ldes-consumer oxigraph"#        - the list of docker images in docker-compose.yml ready to be pushed
 
 .PHONY: help docker-build docker-push docker-start docker-stop
 .DEFAULT_GOAL := help
@@ -16,8 +18,22 @@ help:  ## Shows this list of available targets and their effect.
 
 # usage `make BUILD_TAG=0.2 docker-build` to include a specific tag to the build docker images
 docker-build: ## Builds the docker-images as described in the local docker-compose.yml for ${REG_NS} and ${BUILD_TAG}
-	@echo "building all images as described in local docker-compose.yml for registry/namespace=${REG_NS} with tag=${BUILD_TAG}"
-	@env BUILD_TAG=${BUILD_TAG} REG_NS=${REG_NS} bash -c "docker compose build --no-cache"
+	@echo "building all images from compose files=${COMPOSE_FILES} for registry/namespace=${REG_NS} with tag=${BUILD_TAG}"
+	@env BUILD_TAG=${BUILD_TAG} REG_NS=${REG_NS} bash -c 'set -e; \
+		profile_args=""; \
+		for p in ${ALL_PROFILES}; do profile_args="$$profile_args --profile $$p"; done; \
+		for cf in ${COMPOSE_FILES}; do \
+			if [[ "$$cf" == "docker-compose.yml" ]]; then \
+				echo "building from $$cf with profiles: ${ALL_PROFILES}"; \
+				docker compose -f $$cf $$profile_args build --no-cache; \
+			elif [[ "$$cf" == "docker-compose.oxigraph.yml" ]]; then \
+				echo "building from $$cf service: oxigraph"; \
+				docker compose -f $$cf build --no-cache oxigraph; \
+			else \
+				echo "building from $$cf"; \
+				docker compose -f $$cf build --no-cache; \
+			fi; \
+		done'
 	
 
 # usage `make REG_NS=ghcr.io/vliz-be-opsci/kgap docker-build` to push images to github-container-registry
