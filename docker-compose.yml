@@ -1,9 +1,21 @@
 # this is a sample docker-compose of how to use kgap microservices
 # it functions as (1) a list of images to be build, (2) a usage-example and (3) a quick-test
+#
+# Compose profiles:
+#   - ui         : YASGUI SPARQL UI
+#   - notebooks  : Jupyter notebook environment
+#   - processing : Sembench scheduled processing
+#   - ingest     : LDES consumer ingestion service
+#
+# Examples:
+#   docker compose up -d                              # core services only
+#   docker compose --profile ui --profile notebooks up -d
+#   COMPOSE_PROFILES=ui,notebooks,processing,ingest docker compose up -d
 name: ${COMPOSE_PROJECT_NAME:-kgap}
 # -----------------------------------------------------------------------
 services: 
   yasgui:
+    profiles: ["ui"]
     image: redpencil/yasgui:latest
     container_name: test_kgap_yasgui
     environment:
@@ -34,6 +46,7 @@ services:
     #   retries: 3
 
   jupyter:
+    profiles: ["notebooks"]
     build:
       context: ./jupyter
     image: ${REG_NS:-kgap}/kgap_jupyter:${BUILD_TAG:-latest}
@@ -55,6 +68,7 @@ services:
         condition: service_healthy
 
   sembench:
+    profiles: ["processing"]
     build:
       context: ./sembench
     image: ${REG_NS:-kgap}/kgap_sembench:${BUILD_TAG:-latest}
@@ -74,6 +88,7 @@ services:
         condition: service_healthy
 
   ldes-consumer:
+    profiles: ["ingest"]
     build:
       context: ./ldes-consumer
     image: ${REG_NS:-kgap}/kgap_ldes-consumer:${BUILD_TAG:-latest}

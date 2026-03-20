@@ -22,7 +22,7 @@ mkdir -p ./data ./notebooks
 ## 2. Start the Platform
 
 ```bash
-docker compose up -d
+COMPOSE_PROFILES=ui,notebooks,processing,ingest docker compose up -d
 ```
 
 Verify service access:
